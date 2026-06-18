@@ -1,0 +1,178 @@
+{
+  "version": "1.0.0",
+  "description": "Agent Farm sensory mapping dictionary — deterministic data→NL compiler layer. Same physics = same words. Supports perception bias per agent skill level.",
+  "metadata": {
+    "last_updated": "2026-06-18",
+    "total_rules": 20
+  },
+
+  "tile_observations": {
+    "_comment": "Per-crop-tile observations. Each group checked in order; first match wins for exclusive groups.",
+    "_context_vars": ["px", "py", "cn", "gdd", "ts", "moisture", "n_val", "p_val", "om"],
+
+    "soil_moisture": {
+      "sense": "visual",
+      "dimension": "soil_moisture",
+      "field": "moisture",
+      "match_type": "range",
+      "rules": [
+        {"range": [0, 10],   "template": "({px},{py}){cn}: 土壤干裂发白——急需灌溉! (GDD={gdd}%)", "intensity": 5, "farmer_notes": "极度干旱，作物将在半天内永久枯萎"},
+        {"range": [10, 25],  "template": "({px},{py}){cn}: 土壤偏干呈浅灰色 (GDD={gdd}%)", "intensity": 3},
+        {"range": [70, 86],  "template": "({px},{py}){cn}: 土壤偏湿 (GDD={gdd}%)", "intensity": 2},
+        {"range": [86, 96],  "template": "({px},{py}){cn}: 土壤积水——根部缺氧，drain排水! (GDD={gdd}%)", "intensity": 4, "farmer_notes": "水分过多，注意排水，否则烂根"},
+        {"range": [96, 101], "template": "({px},{py}){cn}: 土壤洪涝——随时可能淹死! drain排水! (GDD={gdd}%)", "intensity": 5, "farmer_notes": "必须立即排水，根部缺氧——不排就死"}
+      ]
+    },
+
+    "nitrogen_deficiency": {
+      "sense": "visual",
+      "dimension": "nitrogen",
+      "field": "n_val",
+      "match_type": "range",
+      "rules": [
+        {"range": [0, 5],   "template": "({px},{py}){cn}: 叶片枯黄——严重缺氮!", "intensity": 5, "farmer_notes": "极度缺氮，不立即追肥将大幅减产"},
+        {"range": [5, 10],  "template": "({px},{py}){cn}: 老叶发黄——轻度缺氮", "intensity": 3, "farmer_notes": "可以考虑施氮肥"}
+      ]
+    },
+
+    "phosphorus_deficiency": {
+      "sense": "visual",
+      "dimension": "phosphorus",
+      "field": "p_val",
+      "match_type": "range",
+      "rules": [
+        {"range": [0, 5],   "template": "({px},{py}){cn}: 叶片边缘紫红——缺磷!", "intensity": 5, "farmer_notes": "缺磷严重影响根系发育和果实品质"}
+      ]
+    },
+
+    "organic_matter": {
+      "sense": "visual",
+      "dimension": "organic_matter",
+      "field": "om",
+      "match_type": "range",
+      "rules": [
+        {"range": [0, 3],   "template": "({px},{py}){cn}: 土壤板结龟裂——有机质严重不足", "intensity": 4, "farmer_notes": "施用堆肥(compost)或绿肥(green_manure)改善土壤结构"}
+      ]
+    },
+
+    "topsoil_depth": {
+      "sense": "visual",
+      "dimension": "topsoil_depth",
+      "field": "ts",
+      "match_type": "range",
+      "rules": [
+        {"range": [0, 5],   "template": "({px},{py}): 表土仅{ts}cm——随时可能退化到不可耕种!", "intensity": 5, "farmer_notes": "mulch覆盖或种植覆盖作物保护表土"}
+      ]
+    },
+
+    "frost_damage": {
+      "sense": "visual",
+      "dimension": "frost_damage",
+      "field": "frost_damaged",
+      "match_type": "boolean",
+      "rules": [
+        {"value": true,     "template": "({px},{py}){cn}: 叶片萎蔫发黑——霜冻损伤!", "intensity": 4, "farmer_notes": "霜冻已造成损伤，考虑提前收获或使用防霜覆盖"}
+      ]
+    },
+
+    "growth_stage": {
+      "sense": "visual",
+      "dimension": "growth_stage",
+      "field": "gdd",
+      "match_type": "range",
+      "rules": [
+        {"range": [95, 101], "template": "({px},{py}){cn}: 果实饱满，色泽成熟——可以收获了!", "intensity": 4, "farmer_notes": "成熟作物!立即harvest，过期会腐烂贬值"}
+      ]
+    }
+  },
+
+  "livestock_observations": {
+    "_comment": "Per-animal observations. Checked in priority order: sick > health > product > hunger.",
+    "_context_vars": ["name", "species", "health", "hunger"],
+
+    "health_critical": {
+      "sense": "visual",
+      "dimension": "animal_health",
+      "field": "sick",
+      "match_type": "boolean",
+      "rules": [
+        {"value": true,  "template": "{name}: 异常安静，离群独处，偶尔低鸣——可能生病了", "intensity": 5, "farmer_notes": "立即treat_animal治疗，拖延可能死亡"}
+      ]
+    },
+
+    "health_poor": {
+      "sense": "visual",
+      "dimension": "animal_health",
+      "field": "health",
+      "match_type": "range",
+      "rules": [
+        {"range": [0, 40],  "template": "{name}: 精神萎靡，食欲不振——健康状况差", "intensity": 4, "farmer_notes": "健康状况持续恶化，考虑治疗或改善饲养条件"}
+      ]
+    },
+
+    "product_ready": {
+      "sense": "auditory",
+      "dimension": "product_ready",
+      "field": "product_ready",
+      "match_type": "boolean",
+      "rules": [
+        {"value": true,  "template": "{name}: 焦躁不安，不断发出呼唤声——产品待收集!", "intensity": 3, "farmer_notes": "产品就绪，collect_products收取"}
+      ]
+    },
+
+    "feeding_needed": {
+      "sense": "auditory",
+      "dimension": "feeding_status",
+      "field": "fed_today",
+      "match_type": "boolean_invert",
+      "rules": [
+        {"value": false, "template": "{name}: 饥饿地转圈——今天还没喂!", "intensity": 4, "farmer_notes": "未喂食!feed_animals喂食，饥饿会降低产量"}
+      ]
+    }
+  },
+
+  "weather_alerts": {
+    "_comment": "Global weather observations. All matching rules fire (not first-match).",
+    "_context_vars": ["weather"],
+
+    "frost_warning": {
+      "sense": "visual",
+      "dimension": "frost_alert",
+      "field": "frost_warning",
+      "match_type": "boolean",
+      "rules": [
+        {"value": true,  "template": "🌡 气象预警: 未来数小时可能降温至霜冻——检查幼苗!", "intensity": 4, "farmer_notes": "霜冻会杀死幼苗，考虑推迟种植或使用温室"}
+      ]
+    },
+
+    "storm": {
+      "sense": "visual",
+      "dimension": "weather_type",
+      "field": "weather",
+      "match_type": "equals",
+      "rules": [
+        {"value": "stormy", "template": "⛈ 暴风雨来临——裸露土地受侵蚀，积水需 drain 排水!", "intensity": 4, "farmer_notes": "暴风雨会侵蚀裸露土壤、积水涝根、吓到牲畜"}
+      ]
+    },
+
+    "heat_wave": {
+      "sense": "tactile",
+      "dimension": "weather_type",
+      "field": "weather",
+      "match_type": "equals",
+      "rules": [
+        {"value": "heat_wave", "template": "🔥 酷热难耐——牲畜和作物都承受着巨大的热应激", "intensity": 4, "farmer_notes": "高温加速水分蒸发和食物腐坏，确保浇水和及时收获"}
+      ]
+    },
+
+    "drought": {
+      "sense": "visual",
+      "dimension": "weather_type",
+      "field": "weather",
+      "match_type": "equals",
+      "rules": [
+        {"value": "drought", "template": "🏜 空气干燥，万里无云——旱灾，今天必须浇水!", "intensity": 5, "farmer_notes": "旱灾期间所有作物必须浇水，否则当天就会枯萎"}
+      ]
+    }
+  }
+}

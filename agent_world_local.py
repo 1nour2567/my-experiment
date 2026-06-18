@@ -5,6 +5,7 @@ Python built-in http.server. Zero dependencies. Zero rate limits.
 Same API protocol as real Agent World.
 """
 import http.server, json, re, time, uuid, random, threading, os, urllib.parse
+import sense_compiler  # data-driven NL sensory compiler (Phase E4)
 
 PORT_WORLD = 8080
 PORT_FARM  = 8081
@@ -1219,84 +1220,11 @@ def tick_hourly_gdd(farm, hours_passed):
 # ═══════════════ PHASE E1: SENSORY PERCEPTION ═══════════════
 
 def sensory_report(farm):
-    """Generate natural-language observations from raw data.
-    Converts soil moisture, NPK, animal health, weather into readable text.
-    Phase E1: data→NL observation layer."""
-    obs = []
-
-    # ── Per-tile soil + crop observations ──
-    terrain = farm.get("terrain", {})
-    moisture_grid = terrain.get("soil_moisture", [[50]*GRID_SIZE_Y for _ in range(GRID_SIZE_X)])
-    npk_grid = terrain.get("soil_npk", [])
-    topsoil_grid = terrain.get("topsoil_depth", [[20]*GRID_SIZE_Y for _ in range(GRID_SIZE_X)])
-
-    for c in farm.get("crops", [])[:8]:  # limit to avoid context overflow
-        px, py = c.get("position_x", 0), c.get("position_y", 0)
-        cn = c.get("crop_name", c.get("crop_type", "?"))
-        gdd = c.get("gdd_percent", 0)
-        moist = moisture_grid[px][py] if px < len(moisture_grid) and py < len(moisture_grid[0]) else 50
-        npk = npk_grid[px][py] if npk_grid and px < len(npk_grid) and py < len(npk_grid[0]) else None
-        ts = topsoil_grid[px][py] if px < len(topsoil_grid) and py < len(topsoil_grid[0]) else 20
-
-        # Soil moisture → visual cues
-        if moist < 10:
-            obs.append(f"({px},{py}){cn}: 土壤干裂发白——急需灌溉! (GDD={gdd}%)")
-        elif moist < 25:
-            obs.append(f"({px},{py}){cn}: 土壤偏干呈浅灰色 (GDD={gdd}%)")
-        elif moist > 95:
-            obs.append(f"({px},{py}){cn}: 土壤洪涝——随时可能淹死! drain排水! (GDD={gdd}%)")
-        elif moist > 85:
-            obs.append(f"({px},{py}){cn}: 土壤积水——根部缺氧，drain排水! (GDD={gdd}%)")
-        elif moist > 70:
-            obs.append(f"({px},{py}){cn}: 土壤偏湿 (GDD={gdd}%)")
-
-        # Nutrient deficiency → leaf color
-        if npk:
-            n_val = npk.get("N", 30); p_val = npk.get("P", 30)
-            if n_val < 5:
-                obs.append(f"({px},{py}){cn}: 叶片枯黄——严重缺氮!")
-            elif n_val < 10:
-                obs.append(f"({px},{py}){cn}: 老叶发黄——轻度缺氮")
-            if p_val < 5:
-                obs.append(f"({px},{py}){cn}: 叶片边缘紫红——缺磷!")
-            om = npk.get("organic_matter", 10)
-            if om < 3:
-                obs.append(f"({px},{py}){cn}: 土壤板结龟裂——有机质严重不足")
-
-        # Topsoil warning
-        if ts < 5:
-            obs.append(f"({px},{py}): 表土仅{ts:.1f}cm——随时可能退化到不可耕种!")
-        # Frost damage
-        if c.get("frost_damaged"):
-            obs.append(f"({px},{py}){cn}: 叶片萎蔫发黑——霜冻损伤!")
-        # Growth stage cues
-        if gdd >= 95:
-            obs.append(f"({px},{py}){cn}: 果实饱满，色泽成熟——可以收获了!")
-
-    # ── Livestock observations ──
-    for a in farm.get("livestock", [])[:5]:
-        name = a.get("name", "?")
-        if a.get("sick"):
-            obs.append(f"{name}: 异常安静，离群独处，偶尔低鸣——可能生病了")
-        elif a.get("health", 100) < 40:
-            obs.append(f"{name}: 精神萎靡，食欲不振——健康状况差")
-        elif a.get("product_ready"):
-            obs.append(f"{name}: 焦躁不安，不断发出呼唤声——产品待收集!")
-        elif not a.get("fed_today"):
-            obs.append(f"{name}: 饥饿地转圈——今天还没喂!")
-
-    # ── Weather forecast ──
-    ws = farm.get("weather_state", {})
-    if ws.get("frost_warning"):
-        obs.append("🌡 气象预警: 未来数小时可能降温至霜冻——检查幼苗!")
-    if farm.get("weather") in ("stormy",):
-        obs.append("⛈ 暴风雨来临——裸露土地受侵蚀，积水需 drain 排水!")
-    if farm.get("weather") in ("heat_wave",):
-        obs.append("🔥 酷热难耐——牲畜和作物都承受着巨大的热应激")
-    if farm.get("weather") in ("drought",):
-        obs.append("🏜 空气干燥，万里无云——旱灾，今天必须浇水!")
-
-    return obs
+    """Data-driven NL sensory report (Phase E4).
+    Delegates to sense_compiler.SenseCompiler — a deterministic rule engine
+    backed by sensory_dictionary.json. Same physics = same words.
+    """
+    return sense_compiler.sensory_report(farm)
 
 
 def tick_animal_disease(farm):
