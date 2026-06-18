@@ -1,0 +1,142 @@
+{
+  "version": "1.0.0",
+  "description": "Agent Farm biome system — 6 biomes with realistic pedology parameters.",
+  "biomes": {
+    "alluvial_plain": {
+      "display_name": "冲积平原",
+      "icon": "🌾",
+      "desc": "河流沉积形成的平坦沃土，天生适合农耕。",
+      "farming_suitability": 0.95,
+      "grazing_suitability": 0.4,
+      "mining_potential": 0.05,
+      "soil": {
+        "types": ["loam", "loam", "loam", "sand"],
+        "water_hold": 0.65,
+        "drain": 0.6,
+        "nutrient_hold": 0.8,
+        "organic_matter_base": 15,
+        "ph_range": [6.0, 7.2],
+        "topsoil_min": 25,
+        "topsoil_max": 40
+      },
+      "resources": ["clay_deposit", "fertile_silt"],
+      "wildlife": ["rabbit", "sparrow", "frog"],
+      "flood_risk": 0.3
+    },
+    "grassland": {
+      "display_name": "温带草原",
+      "icon": "🐄",
+      "desc": "牧草茂盛的辽阔草原，表土深厚有机质丰富。",
+      "farming_suitability": 0.6,
+      "grazing_suitability": 0.95,
+      "mining_potential": 0.1,
+      "soil": {
+        "types": ["loam", "loam", "clay"],
+        "water_hold": 0.5,
+        "drain": 0.5,
+        "nutrient_hold": 0.75,
+        "organic_matter_base": 20,
+        "ph_range": [6.2, 7.5],
+        "topsoil_min": 50,
+        "topsoil_max": 100
+      },
+      "resources": ["wild_herbs", "medicinal_plants", "calcic_layer"],
+      "wildlife": ["deer", "sheep_wild", "eagle", "wolf"],
+      "flood_risk": 0.05
+    },
+    "forest": {
+      "display_name": "森林",
+      "icon": "🌲",
+      "desc": "茂密的树林，提供木材和野味，但砍伐后表土易流失。",
+      "farming_suitability": 0.3,
+      "grazing_suitability": 0.3,
+      "mining_potential": 0.2,
+      "soil": {
+        "types": ["loam", "sand", "loam", "clay"],
+        "water_hold": 0.4,
+        "drain": 0.55,
+        "nutrient_hold": 0.5,
+        "organic_matter_base": 25,
+        "ph_range": [5.0, 6.5],
+        "topsoil_min": 8,
+        "topsoil_max": 20
+      },
+      "trees": [
+        {"species": "oak", "wood_quality": "hardwood", "rarity": 0.4},
+        {"species": "birch", "wood_quality": "standard", "rarity": 0.3},
+        {"species": "pine", "wood_quality": "softwood", "rarity": 0.2},
+        {"species": "maple", "wood_quality": "premium", "rarity": 0.1}
+      ],
+      "resources": ["mushroom", "wild_berry", "medicinal_herb", "honey_tree"],
+      "wildlife": ["deer", "boar", "fox", "rabbit", "owl"],
+      "erosion_multiplier": 3.0,
+      "flood_risk": 0.1
+    },
+    "wetland": {
+      "display_name": "湿地",
+      "icon": "🌿",
+      "desc": "低洼的芦苇湿地，可开发水田或保留作为生态缓冲。",
+      "farming_suitability": 0.2,
+      "grazing_suitability": 0.2,
+      "mining_potential": 0.05,
+      "soil": {
+        "types": ["clay", "clay", "loam"],
+        "water_hold": 0.95,
+        "drain": 0.1,
+        "nutrient_hold": 0.6,
+        "organic_matter_base": 30,
+        "ph_range": [4.5, 6.0],
+        "topsoil_min": 10,
+        "topsoil_max": 25
+      },
+      "resources": ["peat", "reed", "clay_deposit", "fish"],
+      "wildlife": ["frog", "heron", "duck", "dragonfly"],
+      "flood_buffer": true,
+      "flood_risk": 0.8
+    },
+    "hills_mountains": {
+      "display_name": "丘陵山地",
+      "icon": "⛰",
+      "desc": "起伏的丘陵地带，耕作困难但可能隐藏矿脉。",
+      "farming_suitability": 0.15,
+      "grazing_suitability": 0.4,
+      "mining_potential": 0.7,
+      "soil": {
+        "types": ["sand", "clay", "sand"],
+        "water_hold": 0.25,
+        "drain": 0.85,
+        "nutrient_hold": 0.3,
+        "organic_matter_base": 5,
+        "ph_range": [5.5, 7.0],
+        "topsoil_min": 3,
+        "topsoil_max": 15
+      },
+      "resources": ["iron_ore", "copper_ore", "stone", "coal_seam", "rare_earth"],
+      "wildlife": ["goat_wild", "eagle", "marmot"],
+      "terrace_farming_bonus": 0.3,
+      "flood_risk": 0.01
+    },
+    "riverbank": {
+      "display_name": "河岸",
+      "icon": "🏞",
+      "desc": "河流沿岸地带，交通便利但洪水风险高。",
+      "farming_suitability": 0.7,
+      "grazing_suitability": 0.5,
+      "mining_potential": 0.1,
+      "soil": {
+        "types": ["loam", "sand", "loam", "loam"],
+        "water_hold": 0.55,
+        "drain": 0.5,
+        "nutrient_hold": 0.7,
+        "organic_matter_base": 12,
+        "ph_range": [6.0, 7.3],
+        "topsoil_min": 15,
+        "topsoil_max": 35
+      },
+      "resources": ["fish", "clay_deposit", "river_stone"],
+      "wildlife": ["fish", "heron", "otter"],
+      "flood_risk": 0.6,
+      "transport_bonus": true
+    }
+  }
+}

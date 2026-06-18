@@ -1414,6 +1414,32 @@ for cycle in range(3000):  # ~4 game years (memory learning across seasons)
                     result_msg = f"金币不够——{book_def['title']}要{book_def['buy_price']}G"
                 ok = True; resp = {"success": True, "message": result_msg}
                 break
+            elif action == "explore":
+                # Phase W4: Explore terrain — feed discovery into KnowledgeMap
+                body = {"agent_id": AID, "action_type": "explore"}
+                if "positions" in params:
+                    body["positions"] = params["positions"]
+                r = requests.post(f"{BASE_FARM}/api/farm/{FID}/action",
+                    json=body, headers=HDRS, proxies=PROX, timeout=30)
+                resp = r.json() if r.headers.get('content-type','').startswith('application/json') else {"message": r.text[:300]}
+                ok = resp.get("success", r.status_code == 200)
+                result_msg = resp.get("message", resp.get("action_result", str(resp)[:300]))
+                # Feed into KnowledgeMap
+                if ok and resp.get("discovery"):
+                    disc = resp["discovery"]
+                    dist = abs(disc.get("x", 0)) + abs(disc.get("y", 0))
+                    dt = 1 if dist <= 2 else (3 if dist <= 5 else 8)
+                    kmap = knowledge_map.KnowledgeMap.load(VAULT, _prof.id)
+                    kmap.observe_tile(disc.get("x", 0), disc.get("y", 0), dt, {
+                        "biome": disc.get("biome", ""), "soil_type": disc.get("soil_type", ""),
+                        "soil_moisture": disc.get("soil_moisture", 50),
+                        "topsoil_depth": disc.get("topsoil_depth", 20),
+                        "water_nearby": disc.get("water_nearby", False),
+                        "revealed_resource": disc.get("resource", ""),
+                    }, cycle=0)
+                    kmap.save(VAULT)
+                    _prof.history["tiles_explored"] = _prof.history.get("tiles_explored", 0) + 1
+                break
                 body = {"agent_id": AID, "action_type": action}
                 body.update(params)
                 r = requests.post(f"{BASE_FARM}/api/farm/{FID}/action",

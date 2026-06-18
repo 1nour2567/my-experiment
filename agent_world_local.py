@@ -20,11 +20,23 @@ bar_sessions = {}  # session_id -> {agent_id, drink, consumed, mood}
 
 SEASONS = ["Spring","Summer","Fall","Winter"]
 
-# ═══════════════ TERRAIN & GEOGRAPHY ═══════════════
-GRID_SIZE_X = 20   # simulation core — keep lean for LLM cycles
-GRID_SIZE_Y = 28
+# ═══════════════ TERRAIN & GEOGRAPHY (Phase W4) ═══════════════
+GRID_SIZE_X = 50   # expanded for multi-biome world
+GRID_SIZE_Y = 50
 ZONE_TYPES = ["farmland","pasture","orchard","water_source","building_area","wild_buffer"]
-# Soil physics
+
+# Load biome definitions
+def _load_biomes():
+    import os as _os
+    _bp = os.path.join(os.path.dirname(os.path.abspath(__file__)), "biomes.json")
+    if os.path.exists(_bp):
+        with open(_bp, "r", encoding="utf-8") as _f:
+            return json.load(_f)
+    return {"biomes": {}}
+
+BIOME_DEFS = _load_biomes()
+
+# Soil physics (unchanged — biomes select from these)
 SOIL_TYPES = {"sand":  {"water_hold":0.3,"drain":0.8,"till_ease":1.2,"nutrient_hold":0.4},
               "loam":  {"water_hold":0.6,"drain":0.5,"till_ease":1.0,"nutrient_hold":0.7},
               "clay":  {"water_hold":0.9,"drain":0.2,"till_ease":0.7,"nutrient_hold":1.0}}
@@ -40,128 +52,151 @@ CROP_NPK = {"wheat":{"N":-8,"P":-3,"K":-5},"potato":{"N":-6,"P":-4,"K":-10},
 WATER_TYPES = ["pond","stream","well"]
 
 def generate_terrain():
-    """Generate a GRID_SIZE_X × GRID_SIZE_Y terrain with elevation, water, zones."""
-    X = GRID_SIZE_X
-    Y = GRID_SIZE_Y
+    """Phase W4: Generate 50×50 biome-based terrain with realistic pedology.
+
+    Biome distribution: alluvial_plain 40%, grassland 20%, forest 10%,
+    wetland 8%, hills_mountains 12%, riverbank 10%.
+    Each biome has its own soil properties, resources, and wildlife.
+    """
+    X, Y = GRID_SIZE_X, GRID_SIZE_Y
+    biomes = BIOME_DEFS.get("biomes", {})
+
+    # ── 1. Elevation: diamond-square style ──
     elev = [[0]*Y for _ in range(X)]
-    # Seed corners
     elev[0][0] = random.randint(2, 8)
     elev[0][Y-1] = random.randint(2, 8)
     elev[X-1][0] = random.randint(2, 8)
     elev[X-1][Y-1] = random.randint(2, 8)
-    for x in range(X):
-        for y in range(Y):
-            if (x == 0 and y == 0) or (x == 0 and y == Y-1) or (x == X-1 and y == 0) or (x == X-1 and y == Y-1):
-                continue
-            neighbors = []
-            if x > 0: neighbors.append(elev[x-1][y])
-            if y > 0: neighbors.append(elev[x][y-1])
-            if x < X-1: neighbors.append(elev[x+1][y])
-            if y < Y-1: neighbors.append(elev[x][y+1])
-            base = sum(neighbors) / len(neighbors) if neighbors else 5
-            elev[x][y] = max(0, min(10, int(base + random.randint(-2, 2))))
-    # Water sources — more for big farm (3-8)
+    for _ in range(3):  # multi-pass smoothing
+        for x in range(X):
+            for y in range(Y):
+                if x in (0, X-1) and y in (0, Y-1): continue
+                neighbors = []
+                for dx, dy in [(0,1),(1,0),(0,-1),(-1,0)]:
+                    nx, ny = x+dx, y+dy
+                    if 0 <= nx < X and 0 <= ny < Y:
+                        neighbors.append(elev[nx][ny])
+                base = sum(neighbors)/len(neighbors) if neighbors else 5
+                elev[x][y] = max(0, min(10, int(base + random.randint(-1, 1))))
+
+    # ── 2. Water sources ──
     water_sources = []
-    n_water = random.randint(3, 8)
+    n_water = random.randint(4, 10)
     for _ in range(n_water):
         wx = random.randint(int(X*0.1), int(X*0.9)-1)
         wy = random.randint(int(Y*0.1), int(Y*0.9)-1)
-        wtype = random.choice(["pond","stream"])
+        wtype = random.choice(["pond", "stream", "pond"])
         water_sources.append({"x": wx, "y": wy, "type": wtype, "depth": random.randint(2,5)})
-    # Zone assignment
-    zones = [[None]*Y for _ in range(X)]
-    margin = 2  # edge = wild_buffer
+
+    def _dist_water(px, py):
+        return min((abs(px-w["x"])+abs(py-w["y"])) for w in water_sources) if water_sources else 999
+
+    def _slope_at(px, py):
+        slopes = []
+        for dx, dy in [(1,0),(-1,0),(0,1),(0,-1)]:
+            nx, ny = px+dx, py+dy
+            if 0 <= nx < X and 0 <= ny < Y:
+                slopes.append(abs(elev[px][py] - elev[nx][ny]))
+        return max(slopes) if slopes else 0
+
+    # ── 3. Biome assignment (procedural, elevation + water + noise) ──
+    grid_biome = [[""]*Y for _ in range(X)]
+    zones = [[""]*Y for _ in range(X)]
     for x in range(X):
         for y in range(Y):
             e = elev[x][y]
-            dist_to_water = min([abs(x-ws["x"])+abs(y-ws["y"]) for ws in water_sources]) if water_sources else 999
-            slopes = []
-            for dx, dy in [(1,0),(-1,0),(0,1),(0,-1)]:
-                nx, ny = x+dx, y+dy
-                if 0 <= nx < X and 0 <= ny < Y:
-                    slopes.append(abs(e - elev[nx][ny]))
-            slope = max(slopes) if slopes else 0
-            if x < margin or x >= X-margin or y < margin or y >= Y-margin:
-                zones[x][y] = "wild_buffer"
-            elif dist_to_water <= 3 and e <= 7 and slope <= 2:
-                zones[x][y] = "farmland"
-            elif e >= 6 and slope >= 3:
-                zones[x][y] = "orchard"
-            elif slope <= 1 and 3 <= e <= 7:
-                zones[x][y] = "pasture"
-            elif X//3 <= x <= 2*X//3 and Y//3 <= y <= 2*Y//3:
-                zones[x][y] = "building_area"
-            elif dist_to_water == 0:
-                zones[x][y] = "water_source"
+            dw = _dist_water(x, y)
+            s = _slope_at(x, y)
+            # Riverbank: within 1-2 tiles of water
+            if 1 <= dw <= 2 and e <= 6:
+                grid_biome[x][y] = "riverbank"
+            # Wetland: very low elevation, near water
+            elif e <= 2 and dw <= 4:
+                grid_biome[x][y] = "wetland"
+            # Hills/Mountains: high elevation or steep slope
+            elif e >= 7 or (e >= 5 and s >= 3):
+                grid_biome[x][y] = "hills_mountains"
+            # Forest: edges + moderate elevation
+            elif dw >= 8 and 4 <= e <= 7:
+                grid_biome[x][y] = "forest"
+            # Grassland: mid-elevation, away from center
+            elif 3 <= e <= 6 and s <= 2 and dw >= 4:
+                grid_biome[x][y] = "grassland"
+            # Default: alluvial_plain (farmland)
             else:
-                zones[x][y] = "farmland"
-    # Phase C: Orchard zones — 20% of farmland tiles, near edges
-    farm_tiles = [(x, y) for x in range(X) for y in range(Y) if zones[x][y] == "farmland"]
-    n_orchard = int(len(farm_tiles) * 0.15)
-    for x, y in random.sample(farm_tiles, min(n_orchard, len(farm_tiles))):
-        if x % 3 == 0:  # spaced for tree planting
-            zones[x][y] = "orchard"
-    # Microclimate
+                grid_biome[x][y] = "alluvial_plain"
+            zones[x][y] = grid_biome[x][y]  # zones mirror biomes for backward compat
+
+    # ── 4. Soil, NPK, moisture, topsoil per biome ──
+    soil_types = [[""]*Y for _ in range(X)]
+    soil_npk = [[""]*Y for _ in range(X)]
+    soil_moisture = [[50]*Y for _ in range(X)]
+    topsoil_depth = [[20]*Y for _ in range(X)]
+    biome_resources = [[""]*Y for _ in range(X)]
+
+    for x in range(X):
+        for y in range(Y):
+            bm = grid_biome[x][y]
+            bdef = biomes.get(bm, {})
+            bsoil = bdef.get("soil", {})
+            dw = _dist_water(x, y)
+
+            # Soil type
+            stypes = bsoil.get("types", ["loam"])
+            st = random.choice(stypes)
+            soil_types[x][y] = st
+
+            # NPK
+            props = SOIL_TYPES.get(st, SOIL_TYPES["loam"])
+            om_base = bsoil.get("organic_matter_base", 10)
+            nh = bsoil.get("nutrient_hold", 0.5)
+            base_n = int(20 + nh * 50 + random.randint(-5, 10))
+            base_p = int(20 + nh * 40 + random.randint(-5, 10))
+            base_k = int(20 + nh * 35 + random.randint(-5, 10))
+            om = om_base + random.randint(-3, 5)
+            ph_range = bsoil.get("ph_range", [5.5, 7.5])
+            ph = round(random.uniform(ph_range[0], ph_range[1]), 1)
+            soil_npk[x][y] = {"N": base_n, "P": base_p, "K": base_k, "organic_matter": om, "pH": ph}
+
+            # Moisture
+            wh = bsoil.get("water_hold", 0.5)
+            init_moist = int(20 + wh * 80 + (15 if dw <= 3 else 0) + random.randint(-5, 5))
+            soil_moisture[x][y] = max(5, min(100, init_moist))
+
+            # Topsoil
+            ts_min = bsoil.get("topsoil_min", 10)
+            ts_max = bsoil.get("topsoil_max", 30)
+            topsoil_depth[x][y] = random.randint(ts_min, ts_max)
+
+            # Resources (rare chance)
+            res_list = bdef.get("resources", [])
+            if res_list and random.random() < 0.15:
+                biome_resources[x][y] = random.choice(res_list)
+
+    # ── 5. Microclimate ──
     microclimate = [[{} for _ in range(Y)] for _ in range(X)]
     for x in range(X):
         for y in range(Y):
             e = elev[x][y]
-            s = _slope_at(elev, x, y)
+            bm = grid_biome[x][y]
+            bdef = biomes.get(bm, {})
+            s = _slope_at(x, y)
+            dw = _dist_water(x, y)
             mc = {}
-            s_neighbor = elev[x][y+1] if y < Y-1 else e
-            south_facing = (s_neighbor < e)
-            base_gdd_mod = 1.0 - (e - 5) * 0.04
-            if south_facing: base_gdd_mod += 0.05
-            if zones[x][y] == "orchard" and e >= 7: base_gdd_mod += 0.03
-            dist_w = min([abs(x-ws["x"])+abs(y-ws["y"]) for ws in water_sources]) if water_sources else 999
-            flood_risk = max(0, 0.3 - e*0.03 - dist_w*0.02)
-            frost_mod = 1.0 + max(0, (5-e)*0.08)
-            mc["gdd_mod"] = round(base_gdd_mod, 3)
-            mc["flood_risk"] = round(max(0, flood_risk), 3)
-            mc["frost_mod"] = round(frost_mod, 3)
+            base_gdd = 1.0 - (e - 5) * 0.04
+            if bm == "forest": base_gdd -= 0.05  # shade
+            if bm == "hills_mountains": base_gdd -= 0.08  # altitude
+            mc["gdd_mod"] = round(base_gdd, 3)
+            mc["flood_risk"] = round(bdef.get("flood_risk", 0.1), 3)
+            mc["frost_mod"] = round(1.0 + max(0, (6 - e) * 0.1), 3)
             mc["drainage"] = "good" if s >= 2 else ("poor" if e <= 3 else "moderate")
             microclimate[x][y] = mc
-    # Step 5: Soil — type, NPK, organic matter, pH, moisture
-    soil_types = [[None]*Y for _ in range(X)]
-    soil_npk    = [[None]*Y for _ in range(X)]
-    soil_moisture = [[50]*Y for _ in range(X)]
-    for x in range(X):
-        for y in range(Y):
-            e = elev[x][y]
-            dist_w = min([abs(x-ws["x"])+abs(y-ws["y"]) for ws in water_sources]) if water_sources else 999
-            # Low near water = clay (more water), high = sand (drains fast), mid = loam
-            if dist_w <= 2 and e <= 4: st = "clay"
-            elif e >= 7: st = "sand"
-            elif dist_w <= 2: st = "loam"
-            else: st = random.choice(["loam","loam","sand","clay"])
-            soil_types[x][y] = st
-            # NPK: base 30-60 each, higher in loam/clay
-            props = SOIL_TYPES[st]
-            base_n = int(30 + props["nutrient_hold"] * 40 + random.randint(-5, 10))
-            base_p = int(30 + props["nutrient_hold"] * 35 + random.randint(-5, 10))
-            base_k = int(30 + props["nutrient_hold"] * 30 + random.randint(-5, 10))
-            # Organic matter + pH
-            om = int(10 + random.randint(0, 15))
-            ph = round(random.uniform(5.5, 7.5), 1)
-            # Initial moisture: higher near water, lower on sand
-            init_moist = int(30 + props["water_hold"] * 60 + (10 if dist_w <= 2 else 0))
-            soil_moisture[x][y] = min(100, init_moist)
-            soil_npk[x][y] = {"N":base_n,"P":base_p,"K":base_k,"organic_matter":om,"pH":ph}
 
-    # Phase A: topsoil depth generation
-    topsoil_depth = [[0]*Y for _ in range(X)]
-    for x in range(X):
-        for y in range(Y):
-            st = soil_types[x][y]
-            if st == "sand":   topsoil_depth[x][y] = random.randint(18, 30)
-            elif st == "loam": topsoil_depth[x][y] = random.randint(20, 28)
-            elif st == "clay": topsoil_depth[x][y] = random.randint(15, 25)
-            else:              topsoil_depth[x][y] = random.randint(15, 25)
-
-    return {"elevation": elev, "zones": zones, "soil_types": soil_types,
-            "soil_npk": soil_npk, "soil_moisture": soil_moisture,
-            "water_sources": water_sources, "microclimate": microclimate,
-            "topsoil_depth": topsoil_depth}
+    return {"elevation": elev, "zones": zones, "biome": grid_biome,
+            "soil_types": soil_types, "soil_npk": soil_npk,
+            "soil_moisture": soil_moisture, "water_sources": water_sources,
+            "microclimate": microclimate, "topsoil_depth": topsoil_depth,
+            "biome_resources": biome_resources}
 
 
 def _npk_summary(f):
@@ -1772,8 +1807,12 @@ def route_farm(method, path, headers, body):
             "frost_warning": f.get("weather_state",{}).get("frost_warning",False),
             "weed_count": len(f.get("weeds",[])),
             "topsoil_warnings": f.get("topsoil_warnings",[]),
-            "avg_topsoil": (sum(sum(row) for row in f.get("terrain",{}).get("topsoil_depth",[[15]*28]*20))
+            "avg_topsoil": (sum(sum(row) for row in f.get("terrain",{}).get("topsoil_depth",[[15]*GRID_SIZE_Y for _ in range(GRID_SIZE_X)]))
                             / max(1, GRID_SIZE_X*GRID_SIZE_Y)),
+            # Phase W4: biome + terrain data for exploration
+            "terrain_biome": f.get("terrain", {}).get("biome", None),
+            "terrain_elevation": f.get("terrain", {}).get("elevation", None),
+            "biome_resources": f.get("terrain", {}).get("biome_resources", None),
             # Phase B fields
             "available_contracts": f.get("available_contracts", []),
             "signed_contracts": f.get("signed_contracts", []),
@@ -3028,6 +3067,79 @@ def route_farm(method, path, headers, body):
             farmer["fatigue"] = min(100, farmer.get("fatigue",0) + 3)
             return json_resp({"success":True,
                 "action_result":f"阅读{topic}——学识+{gain:.2f}({knowledge.get(topic,0):.1f}/5.0)"})
+
+        # ═══ PHASE W4: EXPLORE (discover terrain, biome, resources) ═══
+        elif action == "explore":
+            terrain = f.get("terrain", {})
+            biome_grid = terrain.get("biome", None)
+            elev_grid = terrain.get("elevation", None)
+            res_grid = terrain.get("biome_resources", None)
+            soil_grid = terrain.get("soil_types", None)
+            moisture_grid = terrain.get("soil_moisture", None)
+            topsoil_grid = terrain.get("topsoil_depth", None)
+            npk_grid = terrain.get("soil_npk", None)
+            water_sources = terrain.get("water_sources", [])
+
+            pos = data.get("positions", [[0,0]])[0] if data.get("positions") else [0,0]
+            px, py = pos[0], pos[1]
+
+            discovery = {"x": px, "y": py}
+            if biome_grid and px < len(biome_grid) and py < len(biome_grid[0]):
+                discovery["biome"] = biome_grid[px][py]
+            if elev_grid and px < len(elev_grid) and py < len(elev_grid[0]):
+                discovery["elevation"] = elev_grid[px][py]
+            if res_grid and px < len(res_grid) and py < len(res_grid[0]):
+                discovery["resource"] = res_grid[px][py] if res_grid[px][py] else "(nothing special)"
+            if soil_grid and px < len(soil_grid) and py < len(soil_grid[0]):
+                discovery["soil_type"] = soil_grid[px][py]
+            if moisture_grid and px < len(moisture_grid) and py < len(moisture_grid[0]):
+                discovery["soil_moisture"] = moisture_grid[px][py]
+            if topsoil_grid and px < len(topsoil_grid) and py < len(topsoil_grid[0]):
+                discovery["topsoil_depth"] = topsoil_grid[px][py]
+            if npk_grid and px < len(npk_grid) and py < len(npk_grid[0]):
+                n = npk_grid[px][py]
+                if n:
+                    discovery["npk_N"] = n.get("N", 0)
+                    discovery["organic_matter"] = n.get("organic_matter", 10)
+
+            # Nearby water
+            nearby_water = [w for w in water_sources if abs(w["x"]-px) + abs(w["y"]-py) <= 5]
+            if nearby_water:
+                discovery["water_nearby"] = True
+                discovery["water_sources_nearby"] = [{"x": w["x"], "y": w["y"], "type": w["type"]} for w in nearby_water[:3]]
+
+            # Compute distance from farm center (tile 0,0 = default starting point)
+            dist = abs(px) + abs(py)
+
+            # Build a natural-language description
+            biome_names = BIOME_DEFS.get("biomes", {})
+            bm = discovery.get("biome", "alluvial_plain")
+            bd = biome_names.get(bm, {})
+            biome_desc = bd.get("desc", "平坦的土地")
+
+            desc_lines = [f"探索了({px},{py})——{bd.get('display_name', bm)}"]
+            if dist <= 5:
+                desc_lines.append("就在附近")
+            elif dist <= 15:
+                desc_lines.append("需要走一段距离")
+            else:
+                desc_lines.append("相当偏远的地方")
+            desc_lines.append(f"地形: {biome_desc}")
+            if discovery.get("resource") and discovery["resource"] != "(nothing special)":
+                desc_lines.append(f"发现: {discovery['resource']}")
+            if discovery.get("water_nearby"):
+                desc_lines.append("附近有水")
+
+            # Remove old data on exploration — agent must explore again if conditions change
+            farmer["fatigue"] = min(100, farmer.get("fatigue", 0) + 5)
+            farmer["sleepiness"] = min(80, farmer.get("sleepiness", 0) + 3)
+
+            resp_data = {
+                "success": True,
+                "action_result": " ".join(desc_lines),
+                "discovery": discovery,
+            }
+            return json_resp(resp_data)
 
         elif action == "sleep":
             sleepiness = farmer.get("sleepiness", 0)
