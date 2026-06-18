@@ -2165,7 +2165,7 @@ def route_farm(method, path, headers, body):
             for c in f["crops"]:
                 if [c.get("position_x",0), c.get("position_y",0)] in positions:
                     c["watered_today"] = False  # dry them out
-            if weather in ("stormy","flood"):
+            if f.get("weather","") in ("stormy","flood"):
                 f["score"] = f.get("score",0) + 10
                 msg = f"紧急排水{n_drained}块地——防止涝害！[+10分]"
             else:
