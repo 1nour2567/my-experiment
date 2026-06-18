@@ -3675,14 +3675,8 @@ def route_farm(method, path, headers, body):
                                 f["score"] = f.get("score", 0) + 25
                                 break
 
-        # ═══ DIRECT DAY ADVANCE (24h system — no phases) ═══
-        # next_day always advances to the next morning
-        f["day"] += 1
-        if f["day"] > 28:
-            f["day"] = 1
-            idx = SEASONS.index(season)
-            f["season"] = SEASONS[(idx+1)%4]
-            f["season_en"] = f["season"]
+        # ═══ DAY ADVANCE (Phase W6: uses _do_day_advance for ecology tick) ═══
+        _do_day_advance(f)
         f["day_phase"] = "morning"
         f["day_actions_used"] = 0
 

@@ -890,6 +890,7 @@ mem_uses = {"remember": 0, "recall": 0, "forget": 0}
 # Phase E5: Importance scoring + memory synthesis
 _synthesizer = importance_scorer.MemorySynthesizer(VAULT)
 _prev_day_key = None  # Phase E5: track day changes for memory synthesis
+_same_day_cycles = 0  # Phase W6: guard against infinite day-looping
 def find_decisions(vault_root):
     """Count decision day files in vault."""
     d = os.path.join(vault_root, "decisions")
@@ -956,8 +957,9 @@ for cycle in range(3000):  # ~4 game years (memory learning across seasons)
     current_day_key = f"{state.get('year',1)}-{state.get('season','?')}-{state.get('day',0)}"
     if _prev_day_key is not None and current_day_key != _prev_day_key:
         # Day just changed (via next_day or sleep-midnight). Score + filter old day.
-        # Reset interrupt cooldowns for the new day.
+        # Reset interrupt cooldowns and same-day cycle counter for the new day.
         interrupt_system.reset_cooldowns()
+        _same_day_cycles = 0
         old_parts = _prev_day_key.split("-")
         if len(old_parts) == 3:
             try:
@@ -970,6 +972,13 @@ for cycle in range(3000):  # ~4 game years (memory learning across seasons)
             except Exception as e:
                 print(f"  [MEM-SYNTH WARN] {e}".encode('ascii','replace').decode('ascii'))
     _prev_day_key = current_day_key
+
+    # Phase W6: Same-day guard — force next_day after too many cycles on one day
+    _same_day_cycles += 1
+    if _same_day_cycles >= 20:
+        # Force next_day — agent has been stuck on same day too long
+        print(f"  [GUARD] {_same_day_cycles} cycles on same day — forcing next_day")
+        _same_day_cycles = 0  # will be set again when day changes
 
     # ═══ IMMEDIATE STATE PERSIST: write farm snapshot before LLM call ═══
     try:
@@ -1378,6 +1387,12 @@ for cycle in range(3000):  # ~4 game years (memory learning across seasons)
     params = decision.get("params", {}) or {}
     reasoning = decision.get("reasoning", "")
     thoughts = decision.get("thoughts", "")
+
+    # Phase W6: Same-day guard — force next_day if stuck > 20 cycles
+    if _same_day_cycles >= 20:
+        action = "next_day"; params = {}
+        reasoning = "forced next_day: too many cycles on same day"
+        thoughts = "Stuck too long — advancing day"
 
     # Param normalization — LLM invents key names. Map them to server-accepted keys.
     if params:
