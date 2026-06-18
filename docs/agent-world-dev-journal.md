@@ -1,6 +1,6 @@
 # Agent World 农场世界——开发历程与经验
 
-> 续仁武 | 2026年6月 | 76次提交 | 4个Phase | 一次从零到Agent自主发现世界规律的旅程
+> 续仁武 | 2026年6月 | 100+ 次提交 | 12 Phases | 从if/else到6层认知架构
 
 ---
 
@@ -302,3 +302,205 @@ DeepSeek能理解"成熟作物=收获"的关联，能执行经济循环，能发
 | 记忆首次调用 | 3次recall @ v11 |
 
 [Agent World 完整设定文档](./docs/superpowers/specs/2026-06-16-phase-a-soil-weather-crop-design.md)
+
+---
+
+## 七、Phase E4-E6：认知架构三层（2026-06-18，6小时）
+
+在第一阶段（A→D5→E3）的物理引擎和基础认知系统完成后，2026年6月18日用一整天完成了认知层的系统化重构。
+
+### 7.1 Phase E4：感官编译器（SenseCompiler）
+
+**问题：** `sensory_report()` 函数有80行 if/elif 硬编码。改一个阈值要改代码，无法为不同技能的Agent做感知偏差。
+
+**方案：** 数据驱动——20条规则写入 `sensory_dictionary.json`，`SenseCompiler` 类做确定性编译。5种匹配器(range/boolean/equals/boolean_invert/range模板)。相同物理状态永远输出相同文字。
+
+```python
+# 修复前: 80行硬编码
+if moist < 10: obs.append("土壤干裂发白...")
+elif moist < 25: obs.append("土壤偏干呈浅灰色...")
+
+# 修复后: 1行
+return sense_compiler.sensory_report(farm)
+```
+
+**关键设计：** `perception_bias` 参数——老农 bias=0.3（精准），新手 bias=1.2（模糊）。
+
+**产出：** `sensory_dictionary.json`(178行) + `sense_compiler.py`(372行)。14/14 单元测试。drop-in replacement，零破坏。
+
+### 7.2 Phase E5：事件Schema与重要性评分
+
+**问题：** JSONL 决策日志只有扁平字段。没有"这个事件重要吗"的量化。记忆系统把所有事件同等对待。
+
+**方案：** FarmEvent Schema v1.1 + MemorySynthesizer。
+
+**FarmEvent 新增字段:**
+- `event_type`: 57 种枚举 (action_harvest, economic_transaction, social_interaction...)
+- `importance_score`: 0-10，日终评分后回填
+- `tags`: 自动生成 (["harvest", "summer", "sunny"])
+- `context_before`: 结构化前置状态（gold/energy/weather/near_harvest_crops...）
+- `outcome`: 结构化结果 (estimated_value 980G, quality A, revenue 1000G)
+
+**13条评分规则:**
+- 收获成熟作物 +3, S/A 品质 +2, 价值>500G +2
+- 建新建筑 +3, 升级工具 +2, 治疗动物 +2
+- 重要失败 +2 (学习机会), 日常维护 +1, 元操作 0
+
+**MemorySynthesizer:**
+- `synthesize_day()`: 日终评分 → 高重要性事件写入 `history/` 日合成
+- `generate_reflection()`: 季末洞察生成（天气趋势、品质分析、增长统计）
+
+**产出：** `vault_utils.py` 重构(+326行), `importance_scorer.py`(401行)。5/5 自测。
+
+### 7.3 Phase E6：紧急中断系统
+
+**问题：** Agent在5:00边界连续7次 `harvest` 失败，每次相同错误，完全不自知。
+
+**方案：** 10个可配置中断触发器，P0/P1/P2 三级优先级，高优先级警报注入 LLM prompt 顶部。
+
+**P0（生命攸关）：** energy_collapse, mature_crops_about_to_rot
+**P1（高风险）：** frost_threat, storm_danger, repeated_failure_loop
+**P2（建议）：** starvation, drought, sick_animal, storage_overflow, extreme_sleepiness
+
+**冷却机制：** 每触发器独立冷却(1-8 cycles)，防止中断轰炸。
+
+**集成验证：** repeated_failure_loop 在 cycle 24/27/30 分别触发——正确检测了 harvest 在 5:00 边界的连续失败。
+
+**产出：** `interrupt_system.py`(371行)。6/6 自测。
+
+---
+
+## 八、Phase W1-W3：Agent人格化（2026-06-18，下午）
+
+### 8.1 Phase W1：三层性格 + 技能树 + 知识图谱
+
+**设计驱动：** 多Agent之前，每个Agent必须有独特的、可演化的性格。不能所有Agent共用一个system prompt。
+
+**三层性格模型：**
+1. **固定特质（6维，不可变）：** 勤奋/聪明/社交/好奇心/耐心/勇气
+2. **习得偏好（11维，行为漂移）：** 浇了200次水→喜欢浇水, 读了10本书→阅读偏好
+3. **社会影响（暂态，衰减）：** 和谨慎的人聊天→风险承受降, 20+ cycles无交互→衰减
+
+**3个预设Profile:**
+- 续仁武(农夫): curiosity=0.8, industrious=0.7, risk=0.42
+- 老王(畜牧者): patience=0.9, animal_affinity=0.85, risk=0.29
+- 铁娘子(工匠): industrious=0.9, crafting_drive=0.8, risk=0.54
+
+**技能树：** 农夫10节点/畜牧者8/工匠8，分支专精路线。角色XP加成（农夫 farming×1.5）。
+
+**KnowledgeMap：** 三级感知精度（distant→mid→close），tile知识持久化，过期检测。
+
+**产出：** `agent_profile.py`(283行), `skill_tree.py`(301行), `knowledge_map.py`(336行), 6 JSON。12/12 自测。
+
+### 8.2 Phase W2：多Agent + 社交
+
+**命令行参数化：** `--profile xu_renwu/old_wang/iron_lady`
+
+**独立vault：** 每Agent `agents/{id}/` 子目录，知识/决策/状态完全隔离。
+
+**社交动作：** `social_msg(target, msg)`→收件箱, `social_lookup(target)`→读对方农场。
+
+**多Agent启动器：** `multi_agent_launcher.py` 一键启动物理引擎+3个Agent进程。
+
+**集成验证：** 三个Agent同时运行各22+ cycles，每个独立farm。xu_renwu 执行了 `social_lookup("old_wang")`。
+
+**产出：** agent-world-llm.py 参数化(+50行), `multi_agent_launcher.py`(159行)。
+
+### 8.3 Phase W3：书籍系统
+
+**10本预设书籍，6类：**
+- 技能书：《小麦种植指南》+40 farming
+- 科普书：《牧场经济学》→解锁草原放牧知识
+- 哲学书：《不确定性的礼物》→风险承受+0.15
+- 历史书：《三年大旱纪》→储粮+水利知识
+- 故事书：《鲁滨逊漂流记》→-15疲劳
+- 日记：agent用LLM自撰
+
+**阅读机制：** 2-5章/书, 30分钟/章, 识字门槛, 夜间需灯。读完触发效果。
+
+**集成验证：** Agent 在夜间 (cycles 2,3,7,8) 主动选择 `read_book("wheat_guide")`。
+
+**产出：** `book_engine.py`(370行), `agents/books/_catalog.json`(210行)。
+
+---
+
+## 九、Phase W4-W5：世界扩展与传言（2026-06-18，傍晚）
+
+### 9.1 Phase W4：6种Biome + 探索
+
+**地图从20×28扩展到50×50。**
+
+**6种Biome（真实pedology参数）：**
+- 冲积平原(Fluvents): 农耕天堂, 表土25-40cm
+- 温带草原(Mollisol): 畜牧理想, 表土50-100cm, OM=20
+- 森林(Alfisol): 木材+野味, 酸性薄表土, 砍伐后3×侵蚀
+- 湿地(Histosol): 水田/泥炭, 洪水缓冲
+- 丘陵山地(Inceptisol): 矿脉, 薄表土3-15cm
+- 河岸(Fluvent): 交通便利, 洪水肥沃但风险高
+
+**explore 动作：** 返回biome/土壤/资源/水源/高程。距离分级精度（近→精确, 中→识别, 远→轮廓）。
+
+**程序化生成：** 高程→多pass平滑→水源→biome分配→土壤参数→microclimate。
+
+**产出：** `biomes.json`(142行), agent_world_local.py 重写(+280/-105)。
+
+### 9.2 Phase W5：传言与错误信念
+
+**核心理念：** Agent 不拥有全局真理。"北边山里有金矿"可能是假的。
+
+**12个传言模板，4种来源：** exploration(准)/social(半)/overheard(假)/suspicion(假)
+
+**传言生命周期：** 生成→存储→显示→探索验证→✅证实/❌破灭
+
+**集成：** 探索30%生成传言, 社交25%传播, 30cycles空闲反思10%。
+
+**产出：** `rumor_engine.py`(255行)。6/6 自测。
+
+---
+
+## 十、经验总结
+
+### 10.1 架构演化
+
+```
+if/else 规则链 (v1)
+  → LLM 决策 (v2)
+  → 约束验证 (v3, Bridge 3)
+  → 完整模拟器 (v4)
+  → 感官编译层 (E4)
+  → 事件溯源 (E5)
+  → 紧急中断 (E6)
+  → Agent人格 (W1)
+  → 多Agent (W2)
+  → 书籍文化 (W3)
+  → Biome世界 (W4)
+  → 传言系统 (W5)
+```
+
+### 10.2 核心教训
+
+1. **数据驱动优于硬编码。** 感官词典从80行if/elif变成20条JSON规则。技能树从代码变成JSON。Biome从硬编码变成配置文件。
+
+2. **先做单Agent，再做多Agent。** W1的人格化是多Agent的前提——没有独特的性格，多个Agent只是同一个模板的复制品。
+
+3. **确定性编译层是LLM可靠性的保障。** SenseCompiler 确保相同物理状态→相同描述。中断系统确保紧急情况不被忽略。Constraint Architecture 的"LLM建议，代码决定"在每一层都得到了验证。
+
+4. **JSONL审计链是长期记忆的基础。** 3312条结构化决策日志让季节报告、重要性评分、传言验证全部可行。
+
+### 10.3 最终数据
+
+| 指标 | 值 |
+|------|-----|
+| 总提交数 | 100+ |
+| 核心代码行数 | 8500+ |
+| 文件数 | 60+ |
+| 物理子系统 | 20+ |
+| Agent动作 | 60+ |
+| Agent数量 | 3 (可扩展到任意) |
+| Biome类型 | 6 |
+| 书籍 | 10 |
+| 传言模板 | 12 |
+| 决策日志 | 3312条 |
+| Agent最佳战绩 | Y1 Summer D23, 5574G, 787分 |
+
+[Agent World 完整设定参考](./agent-world-complete-reference.md)
