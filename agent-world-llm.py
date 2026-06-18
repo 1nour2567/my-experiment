@@ -480,6 +480,15 @@ crop genetics, animal husbandry, and a construction economy.
 Grow your farm's wealth. Start: 2000G, no seeds. The only way to get gold is to harvest crops
 and sell_storage. You CANNOT succeed without the economic cycle: plant → harvest → sell → buy seeds.
 
+## ⚠ CRITICAL: THE PLANTING SEQUENCE (follow this order!)
+You MUST follow this exact sequence to farm:
+1. **buy** seeds (DO ONCE — buy only what you can afford, 3-10 seeds)
+2. **till** land (till as many tiles as seeds you bought)
+3. **plant** seeds (plant each seed on a tilled tile)
+4. **water** crops (water every new planting)
+5. **next_day** when nothing left to do
+⚠ Buying more seeds without tilling+planting first is WASTEFUL — you'll run out of gold!
+
 ## THE FARM WORLD (knowledge facts)
 - 14 crops across 4 seasons. Each needs a specific number of growing hours (GDD) to mature.
 - Crops grow continuously (hour by hour) — not just at day boundaries. Sleep and work both advance time.
@@ -973,12 +982,9 @@ for cycle in range(3000):  # ~4 game years (memory learning across seasons)
                 print(f"  [MEM-SYNTH WARN] {e}".encode('ascii','replace').decode('ascii'))
     _prev_day_key = current_day_key
 
-    # Phase W6: Same-day guard — force next_day after too many cycles on one day
+    # Phase W6: Same-day guard — warn at 25, force next_day at 40
     _same_day_cycles += 1
-    if _same_day_cycles >= 20:
-        # Force next_day — agent has been stuck on same day too long
-        print(f"  [GUARD] {_same_day_cycles} cycles on same day — forcing next_day")
-        _same_day_cycles = 0  # will be set again when day changes
+    _guard_triggered = _same_day_cycles >= 40
 
     # ═══ IMMEDIATE STATE PERSIST: write farm snapshot before LLM call ═══
     try:
@@ -1121,8 +1127,16 @@ for cycle in range(3000):  # ~4 game years (memory learning across seasons)
     near = [c for c in state['crops'] if 50 <= c.get('gdd_percent',0) < 95]
     if near: obs_lines.append(f"🌱 生长中: {len(near)}株(GDD 50-95%)")
     empty = state['tilled'] - state['planted']
-    if empty > 0: obs_lines.append(f"⛏ 空闲土地: {empty}格")
-    if state['tilled'] == 0: obs_lines.append("⛏ 没有翻耕地")
+    seeds = {k:v for k,v in state.get('inventory',{}).items() if v>0 and '_seeds' in k}
+    if empty > 0 and not seeds:
+        obs_lines.append(f"⛏ 空闲土地: {empty}格 — 需要买种子!")
+    elif empty > 0 and seeds:
+        seed_names = ", ".join(f"{k}({v}颗)" for k,v in list(seeds.items())[:3])
+        obs_lines.append(f"🌱 你手里有种子({seed_names}), {empty}块空地等着你——快 plant!")
+    elif state['tilled'] == 0 and seeds:
+        seed_names = ", ".join(f"{k}({v}颗)" for k,v in list(seeds.items())[:3])
+        obs_lines.append(f"⚠ 你有{seed_names}但还没翻地——立刻 till 开垦!")
+    if state['tilled'] == 0: obs_lines.append("⛏ 没有任何翻耕地！用 till 开垦土地 → 然后 plant 播种 → 最后 water 浇水")
     dry = [c for c in state['crops'] if not c.get("watered_today", False)]
     if dry: obs_lines.append(f"💧 {len(dry)}株未浇水")
     wc = state.get('weed_count', 0)
@@ -1134,8 +1148,7 @@ for cycle in range(3000):  # ~4 game years (memory learning across seasons)
     if state['gold'] < 200: obs_lines.append(f"💰 金币将尽({state['gold']}G) — sell 换钱!")
     elif state['gold'] > 3000: obs_lines.append(f"💰 金币充裕({state['gold']}G) — 可建造")
     elif state['gold'] > 3000: obs_lines.append(f"💰 金币充裕: {state['gold']}G")
-    seeds = {k:v for k,v in state.get('inventory',{}).items() if v>0 and '_seeds' in k}
-    if not seeds and state['tilled'] > 0: obs_lines.append("⚠ 缺少种子")
+    if not seeds and state['tilled'] > 0 and empty > 0: obs_lines.append("⚠ 缺少种子 — 用 buy 买一些!")
     if state['weather'] in ('frost',): obs_lines.append("🧊 霜冻天气")
     if state['weather'] in ('drought',): obs_lines.append("🏜 干旱天气")
 
@@ -1286,6 +1299,10 @@ for cycle in range(3000):  # ~4 game years (memory learning across seasons)
         user_msg += f"\n{mem_context}\n"
     user_msg += "\n→ Output valid JSON. Keep thoughts < 80 chars."
 
+    # Phase W6: Same-day warning — hint at 25 cycles
+    if 25 <= _same_day_cycles < 40:
+        user_msg = "⚠ 你已经在这天停留了" + str(_same_day_cycles) + "个周期。有成熟作物就harvest → 有种子就plant → 无事可做就next_day。\n" + user_msg
+
     # Phase E6: Emergency interrupt detection — prepend urgent warnings if needed
     interrupt_context = interrupt_system.check_interrupts(state, {
         "last_failed": _last_failed,
@@ -1389,10 +1406,12 @@ for cycle in range(3000):  # ~4 game years (memory learning across seasons)
     thoughts = decision.get("thoughts", "")
 
     # Phase W6: Same-day guard — force next_day if stuck > 20 cycles
-    if _same_day_cycles >= 20:
+    if _guard_triggered:
         action = "next_day"; params = {}
         reasoning = "forced next_day: too many cycles on same day"
         thoughts = "Stuck too long — advancing day"
+        _same_day_cycles = 0  # reset — day will advance after this action
+        print(f"  [GUARD] {_same_day_cycles}+ cycles on same day — forcing next_day")
 
     # Param normalization — LLM invents key names. Map them to server-accepted keys.
     if params:
@@ -1814,6 +1833,10 @@ Output valid JSON only."""
     if action == "next_day" and resp.get("gdd_today"):
         extra = f" GDD={resp['gdd_today']} crops={resp.get('crop_gdd',[])}"
     log_lines.append(f"[{now}] {action}: {result_msg[:100]}{extra}")
+
+    # Phase W6: Reset same-day counter after successful next_day
+    if action == "next_day" and ok:
+        _same_day_cycles = 0
 
     # Phase 0: JSONL decision log (FarmEvent Schema v1.1.0)
     vu.log_decision(VAULT, cid, state, action, params, ok, result_msg)
