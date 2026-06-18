@@ -1167,18 +1167,21 @@ for cycle in range(3000):  # ~4 game years (memory learning across seasons)
 
             # Clear after reading
             open(inbox_path, "w", encoding="utf-8").close()
-        # List other known agents
+    except Exception:
+        pass
+    # Phase W2: List other agents (always show, independent of inbox)
+    try:
         all_profiles = agent_profile.list_agent_profiles(PARENT_VAULT)
-        others = [p for p in all_profiles if p != _prof.id]
+        others = [p for p in all_profiles if p != _AGENT_PROFILE_ID]
         if others:
             other_names = []
             for oid in others:
                 op = agent_profile.load_agent_profile(oid, PARENT_VAULT)
-                other_names.append(f"{op.avatar_emoji}{op.display_name}({op.role})")
+                other_names.append(f"{op.display_name}({op.role})")
             user_msg += f"## 👥 你认识的人\n{', '.join(other_names)}\n"
             user_msg += "(你可以对他们发送 social_msg 或查看他们的农场 social_lookup)\n"
-    except Exception:
-        pass
+    except Exception as _e:
+        print(f"  [SOCIAL WARN] {str(_e)[:80]}".encode('ascii','replace').decode('ascii'))
     # Phase W3: Book library + reading suggestions
     try:
         lib = _BOOK_ENGINE.get_library(_prof.id)
