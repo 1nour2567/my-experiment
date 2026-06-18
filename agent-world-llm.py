@@ -141,7 +141,7 @@ def search_vault(keyword, n=5):
 
 # ═══════════════ MEMGPT-STYLE MEMORY: Agent-driven store/retrieve ═══════════════
 # Three new actions the LLM can call autonomously:
-#   remember(topic, content) → writes to memory/knowledge/{topic}.md
+#   remember(topic, content) → writes to knowledge/learned/{topic}.md
 #   recall(topic) → searches vault, result injected next cycle
 #   forget(topic) → marks memory as stale
 # Plus: working memory injected into every prompt (like MemGPT's core_memory)
@@ -164,7 +164,7 @@ def _memory_handle(action, params, state):
         if not content:
             return "❌ remember needs 'content' field"
         # Write to agent's own memory file
-        mem_file = f"memory/knowledge/{topic}.md"
+        mem_file = f"knowledge/learned/{topic}.md"
         existing = vread(mem_file)
         entry = f"\n### {state.get('season','?')}D{state.get('day',0)} Y{state.get('year',1)}\n{content}\n"
         vwrite(mem_file, (existing or f"# {topic} (agent memory)\n") + entry)
@@ -192,7 +192,7 @@ def _memory_handle(action, params, state):
         topic = params.get("topic", "")
         if not topic:
             return "❌ forget needs 'topic' field"
-        mem_file = f"memory/knowledge/{topic}.md"
+        mem_file = f"knowledge/learned/{topic}.md"
         if os.path.exists(os.path.join(VAULT, mem_file)):
             # Mark as stale by prepending [STALE] to the file
             content = vread(mem_file)
@@ -235,7 +235,7 @@ def _memory_retrieve(state):
 
     # Layer 4: Auto-retrieve relevant reflections + agent knowledge
     # Always inject consolidated memory if it exists
-    cons = vread("memory/knowledge/_consolidated.md")
+    cons = vread("knowledge/learned/_consolidated.md")
     if cons:
         parts.append(f"## 🧠 Consolidated Knowledge\n{cons[:600]}")
 
@@ -302,7 +302,7 @@ Output ONE line, no markdown. Focus on: what patterns emerged, what should be re
     if summary and len(summary.strip()) > 10:
         _working_memory = f"# 工作记忆 (C{cycle})\n{summary.strip()}\n"
         # Also write to persistent vault file that gets injected into context
-        vwrite("memory/knowledge/_consolidated.md",
+        vwrite("knowledge/learned/_consolidated.md",
                f"# Agent Consolidation (C{cycle})\n"
                f"## {state.get('season','?')}D{state.get('day',0)} Y{state.get('year',1)}\n"
                f"{summary.strip()}\n")
@@ -316,11 +316,9 @@ Output ONE line, no markdown. Focus on: what patterns emerged, what should be re
 
 
 # One-time: create memory dir
-os.makedirs(os.path.join(VAULT, "memory", "reflections"), exist_ok=True)
-os.makedirs(os.path.join(VAULT, "memory", "knowledge"), exist_ok=True)
 os.makedirs(os.path.join(VAULT, "knowledge", "reports"), exist_ok=True)
-os.makedirs(os.path.join(VAULT, "knowledge", "history"), exist_ok=True)
 os.makedirs(os.path.join(VAULT, "knowledge", "learned"), exist_ok=True)
+os.makedirs(os.path.join(VAULT, "history"), exist_ok=True)
 
 # One-time: compress errors.md if it's already bloated (>200KB on startup)
 try:
@@ -425,8 +423,8 @@ def _season_report(state):
 
     report_path = f"knowledge/reports/Y{prev_year}-{prev_season}.md"
     vwrite(report_path, report)
-    # Also snapshot a copy into knowledge/history/
-    vwrite(f"knowledge/history/Y{prev_year}-{prev_season}-report.md", report)
+    # Also snapshot a copy into history/
+    vwrite(f"history/Y{prev_year}-{prev_season}-report.md", report)
     print(f"  [REPORT] {prev_season} Y{prev_year}: {harvest_count} harvests, {sell_count} sales, ~{final_gold}G")
     return report_path
 
@@ -860,7 +858,7 @@ for cycle in range(3000):  # ~4 game years (memory learning across seasons)
                 synth_result = _synthesizer.synthesize_day(old_s, old_y, old_d)
                 if synth_result.get('high_importance_count', 0) > 0:
                     print(f"  [MEM-SYNTH] {old_s}D{old_d} Y{old_y}: {synth_result['high_importance_count']} important events scored ({synth_result['scored_count']} total)")
-                    summary_path = f"knowledge/history/Y{old_y}-{old_s}-D{old_d:02d}-synthesis.md"
+                    summary_path = f"history/Y{old_y}-{old_s}-D{old_d:02d}-synthesis.md"
                     vwrite(summary_path, synth_result.get('summary', ''))
             except Exception as e:
                 print(f"  [MEM-SYNTH WARN] {e}".encode('ascii','replace').decode('ascii'))
@@ -1334,7 +1332,7 @@ Output valid JSON only."""
                         summary = f"\n\n> 📦 压缩于 {now}: 保留最近{len(kept)}条，归档{len(entries)-len(kept)}条旧记录。\n"
                         vwrite("knowledge/errors.md", header + summary + "".join(kept))
                         # Archive old errors to history
-                        old_path = f"knowledge/history/errors-archive-{today}.md"
+                        old_path = f"history/errors-archive-{today}.md"
                         vwrite(old_path, header + "\n".join(entries[:-200]))
                         print(f"  [COMPRESS] errors.md: {len(entries)}→{len(kept)} entries")
                 except Exception:
@@ -1364,8 +1362,6 @@ Output valid JSON only."""
             if reflection:
                 ref_path = f"knowledge/learned/reflection-Y{prev_year}-{prev_season}.md"
                 vwrite(ref_path, reflection)
-                ref_path2 = f"memory/reflections/Y{prev_year}-{prev_season}.md"
-                vwrite(ref_path2, reflection)
                 print(f"  [REFLECTION] {prev_season} Y{prev_year}: stored to knowledge/learned/")
         except Exception as e:
             print(f"  [REFLECTION WARN] {e}".encode('ascii','replace').decode('ascii'))
@@ -1395,10 +1391,10 @@ Output valid JSON only."""
 
 print(f"\n{'='*60}")
 # Memory stats
-mem_files = len([f for f in os.listdir(os.path.join(VAULT, 'memory', 'knowledge')) if f.endswith('.md')]) if os.path.exists(os.path.join(VAULT, 'memory', 'knowledge')) else 0
-reflections = len([f for f in os.listdir(os.path.join(VAULT, 'memory', 'reflections')) if f.endswith('.md')]) if os.path.exists(os.path.join(VAULT, 'memory', 'reflections')) else 0
+mem_files = len([f for f in os.listdir(os.path.join(VAULT, 'knowledge', 'learned')) if f.endswith('.md')]) if os.path.exists(os.path.join(VAULT, 'knowledge', 'learned')) else 0
+history_files = len([f for f in os.listdir(os.path.join(VAULT, 'history')) if f.endswith('.md')]) if os.path.exists(os.path.join(VAULT, 'history')) else 0
 print(f"DONE — Y{state.get('year',1)} {state['season']} D{state['day']} Gold={state['gold']}")
 print(f"MEMORY: {mem_uses['remember']} remembers, {mem_uses['recall']} recalls, {mem_uses['forget']} forgets")
-print(f"VAULT: {mem_files} knowledge files, {reflections} reflections, {len(find_decisions(VAULT))} day files")
+print(f"VAULT: {mem_files} learned files, {history_files} history files, {len(find_decisions(VAULT))} day files")
 print(f"{'='*60}")
 print(f"{'='*60}")
