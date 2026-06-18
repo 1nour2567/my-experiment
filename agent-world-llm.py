@@ -1838,6 +1838,21 @@ Output valid JSON only."""
     if action == "next_day" and ok:
         _same_day_cycles = 0
 
+    # Phase W6: Action chaining — inject next-step hint after key actions
+    if ok:
+        if action == "buy":
+            lookup_result = "✅ 种子已购买！下一个动作必须是 till 翻耕——开垦和种子数量相同的土地。"
+        elif action == "till" or action == "till_bulk":
+            lookup_result = "✅ 土地已翻耕！下一个动作必须是 plant 播种——选择你有种子的作物种下去。"
+        elif action == "plant" or action == "plant_bulk":
+            lookup_result = "✅ 种子已种下！下一个动作必须是 water 浇水——每天都需要浇灌。"
+        elif action == "water":
+            ripe = [c for c in state['crops'] if c.get('gdd_percent',0) >= 95]
+            if ripe:
+                lookup_result = "✅ 已浇水。有作物成熟了——立即 harvest 收获！"
+            else:
+                lookup_result = "✅ 已浇水。检查一下：还有空地和种子吗？有就继续 plant；没有就 next_day。"
+
     # Phase 0: JSONL decision log (FarmEvent Schema v1.1.0)
     vu.log_decision(VAULT, cid, state, action, params, ok, result_msg)
 
