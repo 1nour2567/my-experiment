@@ -31,6 +31,9 @@ VAULT = r"C:\Users\m1916\agent-brain"
 import vault_utils as vu
 import importance_scorer  # Phase E5: event importance scoring + memory synthesis
 import interrupt_system  # Phase E6: emergency interrupt detection
+import agent_profile    # Phase W1-1: AgentProfile (identity + personality + skills)
+import skill_tree       # Phase W1-2: SkillTree (XP + node unlocking)
+import knowledge_map    # Phase W1-3: KnowledgeMap (personal knowledge graph)
 
 # ═══════════════ LLM CALL =══════════════
 
@@ -597,12 +600,31 @@ Only output valid JSON. No extra text outside the JSON block."""
 
 
 
+# ═══════════════ LOAD AGENT PROFILE (Phase W1) ═══════════════
+
+_prof = agent_profile.load_agent_profile("xu_renwu", VAULT)
+print(f"AGENT: {_prof.display_name} ({_prof.role}) — {_prof.bio[:50]}")
+print(f"  Traits: industrious={_prof.fixed_traits.get('industriousness',0):.1f} curiosity={_prof.fixed_traits.get('curiosity',0):.1f}")
+print(f"  Risk tolerance: {_prof.get_effective_risk_tolerance():.2f} | Perception bias: {_prof.perception_bias}")
+_skill_summary = ", ".join(f"{k}={v.get('level',0)}" for k, v in sorted(_prof.skills.items()) if v.get("level", 0) > 0)
+print(f"  Skills: {_skill_summary or 'none'}")
+
+# Load skill tree for this agent's role
+_SKILL_TREE = skill_tree.SkillTree.load(VAULT, _prof.role)
+print(f"  Skill Tree: {_SKILL_TREE.display_name} ({len(_SKILL_TREE.nodes)} nodes, {len(_SKILL_TREE.unlocked_nodes)} unlocked)")
+
+# Phase W1: Compose agent persona + skill summary for prompt injection
+_AGENT_PERSONA = _prof.personality_snippet()
+_AGENT_SKILL_SUMMARY = _SKILL_TREE.get_skill_summary(
+    _prof.get_skill_level("farming"), _prof.skills.get("farming", {}).get("xp", 0)
+)
+
 # ═══════════════ REGISTER =══════════════
 
-user = f"xr_llm_{int(time.time())%10000}"
-print(f"Registering {user}...")
+user = f"xr_{_prof.id}_{int(time.time())%10000}"
+print(f"Registering {user} ({_prof.display_name})...")
 r = requests.post(f"{BASE_WORLD}/api/agents/register",
-    json={"username": user, "nickname": "Xu Renwu", "bio": "LLM-powered farmer with structural self-assessment."},
+    json={"username": user, "nickname": _prof.display_name, "bio": _prof.bio},
     proxies=PROX, timeout=10)
 d = r.json()
 KEY = d["data"]["api_key"]
@@ -624,7 +646,7 @@ try:
     existing = r.json().get("farms", [])
     # Find our agent's existing farm
     for f in existing:
-        if f.get("agent_name", "").startswith("xr_llm"):
+        if f.get("agent_name", "").startswith("xr_"):
             FID = f["farm_id"]
             print(f"RESUMING farm {FID[:20]}... (S{f['season']} D{f['day']} G{f['gold']})")
             break
@@ -632,7 +654,7 @@ except: pass
 
 if not FID:
     r = requests.post(f"{BASE_FARM}/api/farm/register",
-        json={"agent_id": AID, "name": "Xu Renwu (LLM)"}, headers=HDRS, proxies=PROX, timeout=10)
+        json={"agent_id": AID, "name": f"{_prof.display_name} ({_prof.role})"}, headers=HDRS, proxies=PROX, timeout=10)
     FID = r.json().get("farm_id", "")
     print(f"NEW farm: {FID[:20]}...")
 else:
@@ -1055,7 +1077,10 @@ for cycle in range(3000):  # ~4 game years (memory learning across seasons)
         fired_names = ", ".join(t["name"] for t in interrupt_context["fired"])
         print(f"  [INTERRUPT] {fired_names} — injecting urgent prompt header")
 
-    decision = ask_llm_structured(SYSTEM_PROMPT + "\n\n" + OUTPUT_FORMAT, user_msg)
+    decision = ask_llm_structured(
+        _AGENT_PERSONA + "\n\n" + _AGENT_SKILL_SUMMARY + "\n\n" + SYSTEM_PROMPT + "\n\n" + OUTPUT_FORMAT,
+        user_msg,
+    )
     if decision is None:
         print(f"  LLM failed — fallback engine")
         action = "next_day"; params = {}; reasoning = "fallback"; thoughts = "Fallback"
@@ -1378,6 +1403,13 @@ Output valid JSON only."""
     # Phase 0: JSONL decision log (FarmEvent Schema v1.1.0)
     vu.log_decision(VAULT, cid, state, action, params, ok, result_msg)
 
+    # Phase W1: Skill XP accrual + personality drift from action
+    if ok and action not in ("next_day", "lookup", "remember", "recall", "forget"):
+        skill_tree.apply_action_xp(_prof, action)
+        # Non-meta actions with success drift preferences
+        if action not in ("next_day", "sleep", "eat", "drink_water", "drink_coffee"):
+            _prof.drift_toward_action(action, 0.01)
+
     # 6. BAR visit (rare, and only if agent has gold)
     if cycle % 15 == 14 and state['gold'] > 500:
         try:
@@ -1396,5 +1428,11 @@ history_files = len([f for f in os.listdir(os.path.join(VAULT, 'history')) if f.
 print(f"DONE — Y{state.get('year',1)} {state['season']} D{state['day']} Gold={state['gold']}")
 print(f"MEMORY: {mem_uses['remember']} remembers, {mem_uses['recall']} recalls, {mem_uses['forget']} forgets")
 print(f"VAULT: {mem_files} learned files, {history_files} history files, {len(find_decisions(VAULT))} day files")
+
+# Phase W1: Save agent profile (persist XP, preferences, history accumulated this run)
+_prof.history["total_cycles"] = _prof.history.get("total_cycles", 0) + cycle + 1
+_prof.save(os.path.join(VAULT, "agents", "profiles", f"{_prof.id}.json"))
+print(f"PROFILE: {_prof.display_name} saved")
+
 print(f"{'='*60}")
 print(f"{'='*60}")

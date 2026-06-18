@@ -1,0 +1,80 @@
+{
+  "profession": "craftsman",
+  "display_name": "工匠技能",
+  "xp_per_level": [0, 100, 250, 500, 800, 1200, 1800, 2500],
+
+  "nodes": {
+    "basic_forging": {
+      "id": "basic_forging",
+      "name": "基础锻造",
+      "tier": 0,
+      "required_level": 0,
+      "requires": [],
+      "effects": {"forge_speed": 1.0, "unlocks": "copper_tools"},
+      "description": "掌握基础锻造技术。可制作铜制工具。"
+    },
+    "tool_forging": {
+      "id": "tool_forging",
+      "name": "工具锻造",
+      "tier": 1,
+      "required_level": 1,
+      "requires": ["basic_forging"],
+      "effects": {"tool_durability": "+30%", "unlocks": "iron_tools"},
+      "description": "升级农具，增加耐久与效率。解锁铁制工具。"
+    },
+    "precision_casting": {
+      "id": "precision_casting",
+      "name": "精密铸造",
+      "tier": 2,
+      "required_level": 3,
+      "requires": ["tool_forging"],
+      "effects": {"unlocks": ["steel_tools", "iridium_tools"], "tool_efficiency": "+25%"},
+      "description": "解锁钢制和铱制工具。工具效率+25%。"
+    },
+    "construction_craft": {
+      "id": "construction_craft",
+      "name": "建筑工艺",
+      "tier": 1,
+      "required_level": 1,
+      "requires": ["basic_forging"],
+      "effects": {"build_speed": 1.3, "material_efficiency": 0.2},
+      "description": "建造更高级的畜棚和地窖。建造速度+30%，材料节省20%。"
+    },
+    "landscape_architecture": {
+      "id": "landscape_architecture",
+      "name": "景观建筑",
+      "tier": 2,
+      "required_level": 3,
+      "requires": ["construction_craft"],
+      "effects": {"unlocks": ["windmill", "waterwheel", "bridge"], "build_prestige": 0.2},
+      "description": "建造风车、水车、桥梁。提升村庄声望。"
+    },
+    "decorative_craft": {
+      "id": "decorative_craft",
+      "name": "装饰工艺",
+      "tier": 2,
+      "required_level": 2,
+      "requires": ["basic_forging"],
+      "effects": {"unlocks": ["furniture", "artworks"], "happiness_boost": 0.15},
+      "description": "制作家具和艺术品。提升自己和家人的幸福度。"
+    },
+    "master_craftsmanship": {
+      "id": "master_craftsmanship",
+      "name": "大师工艺",
+      "tier": 3,
+      "required_level": 5,
+      "requires": ["precision_casting"],
+      "effects": {"legendary_chance": 0.05, "tool_perfection": true},
+      "description": "传说级锻造。5%概率打造传说品质工具，永不磨损。"
+    },
+    "mining_prospecting": {
+      "id": "mining_prospecting",
+      "name": "矿产勘探",
+      "tier": 2,
+      "required_level": 2,
+      "requires": ["basic_forging"],
+      "effects": {"ore_find_chance": "+30%", "unlocks": "prospect_action"},
+      "description": "可以在丘陵/山地探索矿脉，发现稀有矿石概率+30%。"
+    }
+  }
+}

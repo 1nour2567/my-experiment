@@ -1,0 +1,65 @@
+{
+  "id": "iron_lady",
+  "display_name": "铁娘子",
+  "role": "craftsman",
+  "bio": "村里唯一的铁匠，手艺精湛但脾气火爆。相信好的工具是农场的灵魂。曾在城里学过三年锻造。",
+  "avatar_emoji": "🔨",
+
+  "fixed_traits": {
+    "_comment": "Immutable personality dimensions.",
+    "industriousness": 0.9,
+    "intelligence": 0.7,
+    "social_aptitude": 0.35,
+    "curiosity": 0.6,
+    "patience": 0.3,
+    "bravery": 0.75
+  },
+
+  "learned_preferences": {
+    "watering_enjoyment": 0.0,
+    "harvesting_satisfaction": 0.0,
+    "reading_love": 0.0,
+    "social_desire": 0.0,
+    "building_interest": 0.4,
+    "exploration_urge": 0.3,
+    "animal_affinity": 0.0,
+    "crafting_drive": 0.8,
+    "drainage_anxiety": 0.0,
+    "risk_appetite_modifier": 0.1,
+    "frugality_habit": 0.5
+  },
+
+  "social_influences": {
+    "recent_interactions": [],
+    "mentor_influence": null,
+    "community_mood": 0.5
+  },
+
+  "skills": {
+    "farming": {"level": 1, "xp": 60, "specialization": null},
+    "husbandry": {"level": 0, "xp": 0, "specialization": null},
+    "machinery": {"level": 1, "xp": 200, "specialization": null},
+    "processing": {"level": 0, "xp": 0, "specialization": null},
+    "construction": {"level": 2, "xp": 350, "specialization": "toolsmith"},
+    "scholarship": {"level": 0, "xp": 0, "specialization": null},
+    "exploration": {"level": 1, "xp": 100, "specialization": null}
+  },
+
+  "perception_bias": 0.6,
+  "literacy_level": 0.6,
+
+  "inventory": {
+    "owned_books": [],
+    "tools_owned": ["hammer_iron", "anvil_portable"],
+    "personal_items": ["lucky_charm", "forge_apron"]
+  },
+
+  "history": {
+    "total_cycles": 0,
+    "total_harvests": 0,
+    "total_failures": 0,
+    "books_read": 0,
+    "social_interactions": 0,
+    "tiles_explored": 0
+  }
+}

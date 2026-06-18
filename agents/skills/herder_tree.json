@@ -1,0 +1,80 @@
+{
+  "profession": "herder",
+  "display_name": "畜牧技能",
+  "xp_per_level": [0, 100, 250, 500, 800, 1200, 1800, 2500],
+
+  "nodes": {
+    "basic_husbandry": {
+      "id": "basic_husbandry",
+      "name": "基础畜牧",
+      "tier": 0,
+      "required_level": 0,
+      "requires": [],
+      "effects": {"feed_efficiency": 1.0},
+      "description": "基础的喂养和管理技能。"
+    },
+    "grazing_skills": {
+      "id": "grazing_skills",
+      "name": "放牧技巧",
+      "tier": 1,
+      "required_level": 1,
+      "requires": ["basic_husbandry"],
+      "effects": {"pasture_utilization": 1.5, "feed_reduction": 0.3},
+      "description": "草原利用率+50%，饲料消耗-30%。"
+    },
+    "veterinary_knowledge": {
+      "id": "veterinary_knowledge",
+      "name": "兽医知识",
+      "tier": 1,
+      "required_level": 1,
+      "requires": ["basic_husbandry"],
+      "effects": {"cure_rate": 1.5, "disease_prevention": 0.3},
+      "description": "动物疾病治疗率大幅提升，有一定疾病预防能力。"
+    },
+    "nomadic_economy": {
+      "id": "nomadic_economy",
+      "name": "游牧经济",
+      "tier": 2,
+      "required_level": 3,
+      "requires": ["grazing_skills"],
+      "effects": {"unlocks": "seasonal_migration", "pasture_utilization": 0.2},
+      "description": "可半移动式放牧，随季节转场。草原冬季利用率提升。"
+    },
+    "superior_breeding": {
+      "id": "superior_breeding",
+      "name": "良种培育",
+      "tier": 2,
+      "required_level": 3,
+      "requires": ["veterinary_knowledge"],
+      "effects": {"breeding_advantage": 0.3, "mutation_chance": 0.1},
+      "description": "繁殖时遗传优势+30%，10%概率出现优异变种。"
+    },
+    "dairy_processing": {
+      "id": "dairy_processing",
+      "name": "畜产品加工",
+      "tier": 2,
+      "required_level": 2,
+      "requires": ["basic_husbandry"],
+      "effects": {"unlocks": ["cheese_making", "smoked_meat", "leather_tanning"], "product_value": 2.0},
+      "description": "制作奶酪、熏肉、皮革，产品价值翻倍。"
+    },
+    "herd_expansion": {
+      "id": "herd_expansion",
+      "name": "畜群管理",
+      "tier": 3,
+      "required_level": 4,
+      "requires": ["superior_breeding"],
+      "effects": {"max_animals": "+50%", "twin_birth_chance": 0.15},
+      "description": "最大饲养量+50%，15%概率双胞胎。"
+    },
+    "animal_whisperer": {
+      "id": "animal_whisperer",
+      "name": "动物低语者",
+      "tier": 4,
+      "required_level": 6,
+      "requires": ["herd_expansion"],
+      "effects": {"animal_loyalty": "absolute", "product_quality_boost": 0.3},
+      "description": "传说级技能。动物永不逃跑，所有产品自动提升一级品质。"
+    }
+  }
+}

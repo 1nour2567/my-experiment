@@ -1,0 +1,102 @@
+{
+  "profession": "farmer",
+  "display_name": "农耕技能",
+  "xp_per_level": [0, 100, 250, 500, 800, 1200, 1800, 2500],
+
+  "nodes": {
+    "basic_tillage": {
+      "id": "basic_tillage",
+      "name": "基础耕作",
+      "tier": 0,
+      "required_level": 0,
+      "requires": [],
+      "effects": {"till_speed": 1.0, "till_energy": 8},
+      "description": "掌握基本的翻耕技术。翻耕速度和体力消耗正常。"
+    },
+    "efficient_tillage": {
+      "id": "efficient_tillage",
+      "name": "高效耕作",
+      "tier": 1,
+      "required_level": 1,
+      "requires": ["basic_tillage"],
+      "effects": {"till_speed": 0.75, "till_energy": 6},
+      "description": "改进翻耕姿势和节奏。翻耕速度+25%，体力消耗-25%。"
+    },
+
+    "irrigation_specialist": {
+      "id": "irrigation_specialist",
+      "name": "灌溉专精",
+      "tier": 2,
+      "required_level": 2,
+      "requires": ["efficient_tillage"],
+      "effects": {"water_efficiency": 1.3, "unlocks": "irrigate_drip"},
+      "description": "精通滴灌技术。每次浇水覆盖更多地块，或解锁滴灌系统省水30%。"
+    },
+    "soil_improvement": {
+      "id": "soil_improvement",
+      "name": "土壤改良",
+      "tier": 2,
+      "required_level": 2,
+      "requires": ["efficient_tillage"],
+      "effects": {"compost_efficiency": 1.5, "unlocks": "green_manure"},
+      "description": "绿肥效率+50%，解锁绿肥技术。"
+    },
+
+    "water_engineering": {
+      "id": "water_engineering",
+      "name": "水利工程",
+      "tier": 3,
+      "required_level": 3,
+      "requires": ["irrigation_specialist"],
+      "effects": {"unlocks": ["canal", "reservoir"], "water_hold": "+20%"},
+      "description": "可建造水渠和蓄水池，大幅改善灌溉条件。"
+    },
+    "dryland_farming": {
+      "id": "dryland_farming",
+      "name": "旱作农业",
+      "tier": 3,
+      "required_level": 3,
+      "requires": ["irrigation_specialist"],
+      "effects": {"unlocks": "drought_resistant_crops", "drought_damage_reduction": 0.5},
+      "description": "解锁耐旱品种培育，旱灾作物损失减半。"
+    },
+
+    "organic_agriculture": {
+      "id": "organic_agriculture",
+      "name": "有机农业",
+      "tier": 3,
+      "required_level": 4,
+      "requires": ["soil_improvement"],
+      "effects": {"quality_bonus_chance": 0.15, "unlocks": "advanced_compost"},
+      "description": "解锁高级堆肥配方。S/A级品质概率+15%。"
+    },
+
+    "mechanization": {
+      "id": "mechanization",
+      "name": "机械化",
+      "tier": 2,
+      "required_level": 2,
+      "requires": ["efficient_tillage"],
+      "effects": {"till_bulk_unlock": true, "till_speed": 0.5},
+      "description": "使用重型犁，翻耕速度加倍，解锁批量翻耕。"
+    },
+    "animal_powered_farming": {
+      "id": "animal_powered_farming",
+      "name": "畜力耕作",
+      "tier": 3,
+      "required_level": 4,
+      "requires": ["mechanization"],
+      "effects": {"till_speed": 0.3, "unlocks": "ox_plough"},
+      "description": "训练牛/马协助耕作，犁地速度×3。"
+    },
+    "steam_agriculture": {
+      "id": "steam_agriculture",
+      "name": "蒸汽农机",
+      "tier": 4,
+      "required_level": 6,
+      "requires": ["animal_powered_farming"],
+      "effects": {"till_speed": 0.15, "unlocks": "steam_tractor"},
+      "description": "极后期科技。消耗燃料，耕作效率极大提升。"
+    }
+  }
+}

@@ -1,0 +1,67 @@
+{
+  "id": "xu_renwu",
+  "display_name": "续仁武",
+  "role": "farmer",
+  "bio": "年轻农夫，善于学习但经验不足。喜欢尝试新技术，对书本有天然的亲近感。",
+  "avatar_emoji": "🌾",
+
+  "fixed_traits": {
+    "_comment": "Immutable personality dimensions. Set at agent creation, never change.",
+    "industriousness": 0.7,
+    "intelligence": 0.75,
+    "social_aptitude": 0.4,
+    "curiosity": 0.8,
+    "patience": 0.5,
+    "bravery": 0.6
+  },
+
+  "learned_preferences": {
+    "_comment": "Drift-able values 0.0-1.0. Change through experience. Higher = stronger preference.",
+    "watering_enjoyment": 0.0,
+    "harvesting_satisfaction": 0.0,
+    "reading_love": 0.0,
+    "social_desire": 0.0,
+    "building_interest": 0.0,
+    "exploration_urge": 0.0,
+    "animal_affinity": 0.0,
+    "crafting_drive": 0.0,
+    "drainage_anxiety": 0.0,
+    "risk_appetite_modifier": 0.0,
+    "frugality_habit": 0.0
+  },
+
+  "social_influences": {
+    "_comment": "Transient modifiers from recent interactions. Decay over time.",
+    "recent_interactions": [],
+    "mentor_influence": null,
+    "community_mood": 0.5
+  },
+
+  "skills": {
+    "farming": {"level": 1, "xp": 120, "specialization": null},
+    "husbandry": {"level": 0, "xp": 0, "specialization": null},
+    "machinery": {"level": 0, "xp": 0, "specialization": null},
+    "processing": {"level": 0, "xp": 0, "specialization": null},
+    "construction": {"level": 0, "xp": 0, "specialization": null},
+    "scholarship": {"level": 1, "xp": 50, "specialization": null},
+    "exploration": {"level": 0, "xp": 0, "specialization": null}
+  },
+
+  "perception_bias": 1.2,
+  "literacy_level": 0.85,
+
+  "inventory": {
+    "owned_books": [],
+    "tools_owned": [],
+    "personal_items": []
+  },
+
+  "history": {
+    "total_cycles": 0,
+    "total_harvests": 0,
+    "total_failures": 0,
+    "books_read": 0,
+    "social_interactions": 0,
+    "tiles_explored": 0
+  }
+}
