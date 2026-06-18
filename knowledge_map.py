@@ -62,6 +62,19 @@ class AgentPerception:
     shared_facts: List[str] = field(default_factory=list)
 
 
+@dataclass
+class Rumor:
+    """A potentially false belief about the world. Only verified when observed."""
+    rumor_id: str
+    claim: str                    # e.g. "北边森林深处有一片古老的蘑菇地"
+    source: str                   # "old_wang", "overheard", "book", "suspicion"
+    tile_x: int = -1              # target tile, -1 = not location-specific
+    tile_y: int = -1
+    confidence: float = 0.6       # how much the agent believes this
+    is_true: Optional[bool] = None  # None = unverified, True/False = verified
+    verified_cycle: int = 0
+
+
 # ═══════════════════════════ KNOWLEDGE MAP ═══════════════════════════
 
 @dataclass
@@ -80,6 +93,9 @@ class KnowledgeMap:
 
     # ── Social knowledge ──
     agent_perceptions: Dict[str, AgentPerception] = field(default_factory=dict)
+
+    # ── Rumors & false beliefs (Phase W4+) ──
+    rumors: List[Rumor] = field(default_factory=list)
 
     # ═══════════════════════ TILE METHODS ═══════════════════════
 
@@ -227,6 +243,57 @@ class KnowledgeMap:
             ap = self.agent_perceptions[other_id]
             ap.trust_level = max(0.0, min(1.0, ap.trust_level + delta))
 
+    # ═══════════════════════ RUMOR METHODS ═══════════════════════
+
+    def add_rumor(self, rumor: Rumor):
+        """Add a rumor. Silently ignores exact duplicates."""
+        for r in self.rumors:
+            if r.claim == rumor.claim and r.tile_x == rumor.tile_x:
+                return  # duplicate
+        self.rumors.append(rumor)
+
+    def verify_rumors_at(self, x: int, y: int, reality: Dict[str, Any]) -> List[str]:
+        """Verify all unverified rumors about a tile against ground truth.
+        Returns list of resolution messages (e.g. 'rumor confirmed' or 'rumor busted')."""
+        msgs = []
+        for rumor in self.rumors:
+            if rumor.tile_x != x or rumor.tile_y != y or rumor.is_true is not None:
+                continue
+            rumor.is_true = False  # default: busted
+            # Check if the claim matches reality
+            claim_lower = rumor.claim.lower()
+            if reality.get("biome") == "forest" and "森林" in rumor.claim:
+                rumor.is_true = True
+            if reality.get("biome") == "grassland" and "草原" in rumor.claim:
+                rumor.is_true = True
+            if reality.get("biome") in ("hills_mountains",) and ("矿" in rumor.claim or "金" in rumor.claim):
+                rumor.is_true = reality.get("resource", "") not in ("", "(nothing special)")
+            if reality.get("resource") and reality["resource"] in rumor.claim:
+                rumor.is_true = True
+            if reality.get("water_nearby") and "水" in rumor.claim:
+                rumor.is_true = True
+
+            rumor.verified_cycle = 0  # timestamp via caller
+            if rumor.is_true:
+                msgs.append(f"✅ 传言证实: {rumor.claim} (此前你听{rumor.source}说的)")
+            else:
+                msgs.append(f"❌ 传言破灭: {rumor.claim} —— {rumor.source}说的并不准确")
+
+        return msgs
+
+    def unverified_rumors_snippet(self) -> str:
+        """Generate a compact rumor summary for LLM context."""
+        unverified = [r for r in self.rumors if r.is_true is None]
+        if not unverified:
+            return ""
+        lines = ["## 🗣 你听说过这些传言（未经证实）"]
+        for r in unverified[-5:]:
+            loc = f"({r.tile_x},{r.tile_y})" if r.tile_x >= 0 else "某处"
+            trust_icon = "🤔" if r.confidence < 0.4 else "👂"
+            lines.append(f"- {trust_icon} {loc}: {r.claim} (来自{r.source}, 可信度{r.confidence:.0%})")
+        lines.append("传言可能是假的——亲自探索才能确认真伪。")
+        return "\n".join(lines)
+
     # ═══════════════════════ SERIALIZATION ═══════════════════════
 
     def save(self, vault_root: str):
@@ -243,6 +310,7 @@ class KnowledgeMap:
             "agent_perceptions": {
                 k: asdict(v) for k, v in self.agent_perceptions.items()
             },
+            "rumors": [asdict(r) for r in self.rumors],
         }
         with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
@@ -261,6 +329,8 @@ class KnowledgeMap:
             kmap.discovered_facts = data.get("discovered_facts", [])
             for aid, apd in data.get("agent_perceptions", {}).items():
                 kmap.agent_perceptions[aid] = AgentPerception(**apd)
+            for rd in data.get("rumors", []):
+                kmap.rumors.append(Rumor(**rd))
 
         return kmap
 

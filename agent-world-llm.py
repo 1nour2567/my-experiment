@@ -59,6 +59,7 @@ import agent_profile    # Phase W1-1: AgentProfile (identity + personality + ski
 import skill_tree       # Phase W1-2: SkillTree (XP + node unlocking)
 import knowledge_map    # Phase W1-3: KnowledgeMap (personal knowledge graph)
 import book_engine      # Phase W3: Book catalog + reading mechanics + writing
+import rumor_engine     # Phase W4: Rumor generation + verification
 
 # ═══════════════ LLM CALL =══════════════
 
@@ -542,6 +543,13 @@ You can read books from your library! Books give skill XP, unlock knowledge, and
 **Use `buy_book(book_id="soil_science")` to buy from the market.**
 Reading at night requires a lamp. Story books reduce fatigue!
 
+## 🗺 EXPLORATION — Discover the world beyond your farm
+Your farm sits in a 50x50 world with 6 different terrains: fertile plains,
+grassland, forest, wetland, hills, and riverbanks. You DON'T know what's out there.
+**Use `explore({"positions": [[x, y]]})` to discover distant tiles.**
+Each exploration reveals: biome type, soil quality, resources, water, elevation.
+The farther you go, the more you discover — but rumors may be wrong.
+
 ## 📖 Building Prices (you CAN afford these!)
 | Building | Cost | Days | Effect |
 |----------|------|------|--------|
@@ -670,6 +678,9 @@ _AGENT_SKILL_SUMMARY = _SKILL_TREE.get_skill_summary(
 # Phase W3: Initialize book engine
 _BOOK_ENGINE = book_engine.BookEngine(PARENT_VAULT)
 _BOOK_LIBRARY = _BOOK_ENGINE.get_library(_prof.id)
+
+# Phase W4+: Initialize rumor engine
+_RUMOR_ENGINE = rumor_engine.RumorEngine()
 # Auto-add a starter book for new agents
 if not _BOOK_LIBRARY:
     _BOOK_ENGINE.add_book_to_library(_prof.id, "wheat_guide", cycle=0)
@@ -1141,6 +1152,26 @@ for cycle in range(3000):  # ~4 game years (memory learning across seasons)
                 user_msg += f"🌙 夜晚无事——书架上还有未读完的《{next_book.title}》（已读{next_book.chapters_read}/{next_book.chapters}章）。可以用 read_book 阅读。\n"
     except Exception:
         pass
+    # Phase W4+: Display unverified rumors + idle reflection
+    try:
+        kmap = knowledge_map.KnowledgeMap.load(VAULT, _prof.id)
+        rumor_snippet = kmap.unverified_rumors_snippet()
+        if rumor_snippet:
+            user_msg += rumor_snippet + "\n"
+        # Occasional idle reflection (every ~30 cycles)
+        if cycle % 30 == 0:
+            current_biome = state.get("terrain_biome", None)
+            if isinstance(current_biome, list) and len(current_biome) > 0:
+                row = current_biome[min(5, len(current_biome)-1)]
+                bm = row[min(5, len(row)-1)] if row else "alluvial_plain"
+            else:
+                bm = "alluvial_plain"
+            rumor = _RUMOR_ENGINE.idle_reflection(kmap, bm)
+            if rumor:
+                user_msg += f"\n💭 你忽然想到: {rumor.claim}\n"
+            kmap.save(VAULT)
+    except Exception:
+        pass
     # Phase E1: Sensory observations (soil moisture color, leaf health, animal sounds, weather)
     sensory = state.get("sensory_observations", [])
     if sensory:
@@ -1342,6 +1373,20 @@ for cycle in range(3000):  # ~4 game years (memory learning across seasons)
                     with open(inbox_path, "a", encoding="utf-8") as _inf:
                         _inf.write(entry)
                     result_msg = f"Sent message to {target}: {msg[:100]}"
+                    # Phase W4+: Social interactions may spread rumors
+                    target_prof = agent_profile.load_agent_profile(target, PARENT_VAULT)
+                    target_biome = state.get("terrain_biome", [[None]*50 for _ in range(50)])
+                    # Approximate: use the agent's current farm position biome
+                    if isinstance(target_biome, list) and len(target_biome) > 0:
+                        row = target_biome[min(5, len(target_biome)-1)]
+                        bm = row[min(5, len(row)-1)] if row else "alluvial_plain"
+                    else:
+                        bm = "alluvial_plain"
+                    kmap = knowledge_map.KnowledgeMap.load(VAULT, _prof.id)
+                    rumor = _RUMOR_ENGINE.on_social_interaction(kmap, target, bm)
+                    if rumor:
+                        lookup_result = f"🗣 从{target}那里听到一个传言: {rumor.claim}"
+                    kmap.save(VAULT)
                 else:
                     result_msg = "social_msg needs target and message"
                 ok = True; resp = {"success": True, "message": result_msg}
@@ -1439,6 +1484,19 @@ for cycle in range(3000):  # ~4 game years (memory learning across seasons)
                     }, cycle=0)
                     kmap.save(VAULT)
                     _prof.history["tiles_explored"] = _prof.history.get("tiles_explored", 0) + 1
+                    # Phase W4+: Verify rumors about this tile
+                    reality = {
+                        "biome": disc.get("biome", ""),
+                        "resource": disc.get("resource", ""),
+                        "water_nearby": disc.get("water_nearby", False),
+                    }
+                    rumor_msgs = _RUMOR_ENGINE.on_explore(
+                        kmap, disc.get("x", 0), disc.get("y", 0),
+                        disc.get("biome", "alluvial_plain"), reality
+                    )
+                    if rumor_msgs:
+                        lookup_result = "\n".join(rumor_msgs)
+                    kmap.save(VAULT)
                 break
                 body = {"agent_id": AID, "action_type": action}
                 body.update(params)
