@@ -3,7 +3,13 @@ XuRenwu LLM Agent — DeepSeek brain, Obsidian vault, local Agent World
 ======================================================================
 Replaces if-else decision engine with DeepSeek API.
 Agent reads state from vault -> asks LLM what to do -> executes -> records reasoning.
+
+Usage:
+    python agent-world-llm.py                          # default: xu_renwu
+    python agent-world-llm.py --profile old_wang       # herder
+    python agent-world-llm.py --profile iron_lady      # craftsman
 """
+import sys as _sys
 import requests, json, time, re, os, datetime, glob, random, shutil
 from collections import defaultdict, deque
 
@@ -25,7 +31,25 @@ BASE_WORLD = "http://127.0.0.1:8080"
 BASE_FARM  = "http://127.0.0.1:8081"
 BASE_BAR   = "http://127.0.0.1:8082"
 PROX = {"http": None, "https": None}
-VAULT = r"C:\Users\m1916\agent-brain"
+
+# ═══════════════ PROFILE SELECTION (Phase W2) ═══════════════
+# Parse --profile <agent_id> from command line. Default: xu_renwu.
+_AGENT_PROFILE_ID = "xu_renwu"
+for _i, _arg in enumerate(_sys.argv[1:], 1):
+    if _arg == "--profile" and _i < len(_sys.argv) - 1:
+        _AGENT_PROFILE_ID = _sys.argv[_i + 1]
+        break
+    elif _arg.startswith("--profile="):
+        _AGENT_PROFILE_ID = _arg.split("=", 1)[1]
+
+VAULT = os.path.join(r"C:\Users\m1916\agent-brain", "agents", _AGENT_PROFILE_ID)
+PARENT_VAULT = r"C:\Users\m1916\agent-brain"  # shared resources: profiles, skill trees, sensory dict
+# Ensure sub-vault directories exist
+for _sub in ["knowledge", "decisions", "state", "history", "memory"]:
+    os.makedirs(os.path.join(VAULT, _sub), exist_ok=True)
+# Also ensure knowledge subdirs
+for _sub in ["knowledge/reports", "knowledge/learned"]:
+    os.makedirs(os.path.join(VAULT, _sub), exist_ok=True)
 
 # ═══════════════ SHARED VAULT UTILS =══════════════
 import vault_utils as vu
@@ -494,6 +518,22 @@ Your memory is the ONLY way you improve. Use it. Here is exactly when:
 
 These memories persist forever. They appear in your context. USE THEM.
 
+## 👥 SOCIAL — Interact with other farmers
+The farm world has other agents! You can see them listed in your context.
+**Use `social_msg(target, message)` to:**
+- Ask for advice ("old_wang, when is the best time to breed sheep?")
+- Share discoveries ("iron_lady, I found clay deposits in the north hills")
+- Trade offers ("xu_renwu, I'll trade 20 wheat for 1 iron hoe")
+- Just chat and build relationships
+
+**Use `social_lookup(target)` to:**
+- Check another farmer's farm status
+- See what crops they're growing
+- Learn from their farm layout
+
+Social interactions build trust and can lead to skill sharing. The more you interact,
+the more you learn from each other.
+
 ## 📖 Building Prices (you CAN afford these!)
 | Building | Cost | Days | Effect |
 |----------|------|------|--------|
@@ -602,7 +642,7 @@ Only output valid JSON. No extra text outside the JSON block."""
 
 # ═══════════════ LOAD AGENT PROFILE (Phase W1) ═══════════════
 
-_prof = agent_profile.load_agent_profile("xu_renwu", VAULT)
+_prof = agent_profile.load_agent_profile(_AGENT_PROFILE_ID, PARENT_VAULT)
 print(f"AGENT: {_prof.display_name} ({_prof.role}) — {_prof.bio[:50]}")
 print(f"  Traits: industrious={_prof.fixed_traits.get('industriousness',0):.1f} curiosity={_prof.fixed_traits.get('curiosity',0):.1f}")
 print(f"  Risk tolerance: {_prof.get_effective_risk_tolerance():.2f} | Perception bias: {_prof.perception_bias}")
@@ -610,7 +650,7 @@ _skill_summary = ", ".join(f"{k}={v.get('level',0)}" for k, v in sorted(_prof.sk
 print(f"  Skills: {_skill_summary or 'none'}")
 
 # Load skill tree for this agent's role
-_SKILL_TREE = skill_tree.SkillTree.load(VAULT, _prof.role)
+_SKILL_TREE = skill_tree.SkillTree.load(PARENT_VAULT, _prof.role)
 print(f"  Skill Tree: {_SKILL_TREE.display_name} ({len(_SKILL_TREE.nodes)} nodes, {len(_SKILL_TREE.unlocked_nodes)} unlocked)")
 
 # Phase W1: Compose agent persona + skill summary for prompt injection
@@ -646,7 +686,7 @@ try:
     existing = r.json().get("farms", [])
     # Find our agent's existing farm
     for f in existing:
-        if f.get("agent_name", "").startswith("xr_"):
+        if f.get("agent_name", "") == user:
             FID = f["farm_id"]
             print(f"RESUMING farm {FID[:20]}... (S{f['season']} D{f['day']} G{f['gold']})")
             break
@@ -1047,6 +1087,28 @@ for cycle in range(3000):  # ~4 game years (memory learning across seasons)
 
     if obs_lines:
         user_msg += "## 📋 农场观察\n" + "\n".join(obs_lines) + "\n"
+    # Phase W2: Social awareness — other agents' existence + incoming messages
+    try:
+        inbox_path = os.path.join(PARENT_VAULT, "social", f"{_prof.id}_inbox.md")
+        if os.path.exists(inbox_path):
+            with open(inbox_path, "r", encoding="utf-8") as _ibf:
+                inbox_content = _ibf.read()
+            if inbox_content.strip():
+                user_msg += f"## 💬 收到的消息\n{inbox_content[-600:]}\n"
+            # Clear after reading
+            open(inbox_path, "w", encoding="utf-8").close()
+        # List other known agents
+        all_profiles = agent_profile.list_agent_profiles(PARENT_VAULT)
+        others = [p for p in all_profiles if p != _prof.id]
+        if others:
+            other_names = []
+            for oid in others:
+                op = agent_profile.load_agent_profile(oid, PARENT_VAULT)
+                other_names.append(f"{op.avatar_emoji}{op.display_name}({op.role})")
+            user_msg += f"## 👥 你认识的人\n{', '.join(other_names)}\n"
+            user_msg += "(你可以对他们发送 social_msg 或查看他们的农场 social_lookup)\n"
+    except Exception:
+        pass
     # Phase E1: Sensory observations (soil moisture color, leaf health, animal sounds, weather)
     sensory = state.get("sensory_observations", [])
     if sensory:
@@ -1235,6 +1297,40 @@ for cycle in range(3000):  # ~4 game years (memory learning across seasons)
                 result_msg = _memory_handle(action, params, state)
                 ok = True; resp = {"success": True, "message": result_msg}
                 mem_uses[action] = mem_uses.get(action, 0) + 1
+                break
+            elif action == "social_msg":
+                # Phase W2: inter-agent social message — write to recipient inbox
+                target = params.get("target", "")
+                msg = params.get("message", "")
+                if target and msg:
+                    inbox_dir = os.path.join(PARENT_VAULT, "social")
+                    os.makedirs(inbox_dir, exist_ok=True)
+                    inbox_path = os.path.join(inbox_dir, f"{target}_inbox.md")
+                    entry = f"\n### {_prof.display_name} ({state.get('season','?')}D{state.get('day',0)} Y{state.get('year',1)})\n{msg}\n"
+                    with open(inbox_path, "a", encoding="utf-8") as _inf:
+                        _inf.write(entry)
+                    result_msg = f"Sent message to {target}: {msg[:100]}"
+                else:
+                    result_msg = "social_msg needs target and message"
+                ok = True; resp = {"success": True, "message": result_msg}
+                break
+            elif action == "social_lookup":
+                # Phase W2: look up another agent's farm summary
+                target = params.get("target", "")
+                if target:
+                    target_state_path = os.path.join(
+                        PARENT_VAULT, "agents", target, "state", "farm.md"
+                    )
+                    if os.path.exists(target_state_path):
+                        with open(target_state_path, "r", encoding="utf-8") as _sf:
+                            lookup_result = f"📋 {target}的农场:\n{_sf.read()[:1200]}"
+                        result_msg = f"Looked up {target}'s farm"
+                    else:
+                        lookup_result = f"📋 {target}: 没有找到该农夫的农场信息"
+                        result_msg = f"No farm data for {target}"
+                else:
+                    result_msg = "social_lookup needs target agent"
+                ok = True; resp = {"success": True, "message": result_msg}
                 break
             else:
                 body = {"agent_id": AID, "action_type": action}
@@ -1431,7 +1527,7 @@ print(f"VAULT: {mem_files} learned files, {history_files} history files, {len(fi
 
 # Phase W1: Save agent profile (persist XP, preferences, history accumulated this run)
 _prof.history["total_cycles"] = _prof.history.get("total_cycles", 0) + cycle + 1
-_prof.save(os.path.join(VAULT, "agents", "profiles", f"{_prof.id}.json"))
+_prof.save(os.path.join(PARENT_VAULT, "agents", "profiles", f"{_prof.id}.json"))
 print(f"PROFILE: {_prof.display_name} saved")
 
 print(f"{'='*60}")

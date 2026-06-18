@@ -59,6 +59,8 @@ BASE_ACTION_XP = {
     "remember": {},
     "recall": {},
     "forget": {},
+    "social_msg": {"scholarship": 3},
+    "social_lookup": {"scholarship": 2},
 }
 
 # Role-based XP multipliers (profession gets bonus in their domain)

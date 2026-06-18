@@ -112,6 +112,9 @@ ACTION_TO_EVENT_TYPE = {
     "prune": "action_prune",
     "spread_manure": "action_spread_manure",
     "insurance": "meta_insurance",
+    # Phase W2: Social
+    "social_msg": "social_interaction",
+    "social_lookup": "social_interaction",
 }
 
 # ── Auto-tagging: action → default tags ──
@@ -124,6 +127,7 @@ ACTION_TAGS = {
     "save_seeds": ["genetics"], "breed": ["genetics", "livestock"],
     "sleep": ["body"], "eat": ["body"], "exercise": ["body"],
     "next_day": ["meta"], "remember": ["memory"], "recall": ["memory"],
+    "social_msg": ["social"], "social_lookup": ["social"],
 }
 
 
