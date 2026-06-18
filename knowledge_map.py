@@ -297,8 +297,8 @@ class KnowledgeMap:
     # ═══════════════════════ SERIALIZATION ═══════════════════════
 
     def save(self, vault_root: str):
-        """Persist knowledge map to agents/knowledge/{agent_id}.json."""
-        path = os.path.join(vault_root, "agents", "knowledge", f"{self.agent_id}.json")
+        """Persist knowledge map to knowledge/map.json inside the agent's sub-vault."""
+        path = os.path.join(vault_root, "knowledge", "map.json")
         os.makedirs(os.path.dirname(path), exist_ok=True)
 
         data = {
@@ -318,7 +318,7 @@ class KnowledgeMap:
     @classmethod
     def load(cls, vault_root: str, agent_id: str) -> "KnowledgeMap":
         """Load knowledge map from disk, or create a fresh one."""
-        path = os.path.join(vault_root, "agents", "knowledge", f"{agent_id}.json")
+        path = os.path.join(vault_root, "knowledge", "map.json")
         kmap = cls(agent_id=agent_id)
 
         if os.path.exists(path):
