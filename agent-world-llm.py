@@ -933,6 +933,10 @@ for cycle in range(3000):  # ~4 game years (memory learning across seasons)
         "frost_warning": d.get("frost_warning", False),
         "available_contracts": d.get("available_contracts", []),
         "signed_contracts": d.get("signed_contracts", []),
+        # Phase W6: Ecology
+        "ecology_observations": d.get("ecology_observations", []),
+        "wolf_warning": d.get("wolf_warning", ""),
+        "ecology_alerts": d.get("ecology_alerts", []),
     }
 
     # Phase E5: Detect day change and trigger memory synthesis for old day
@@ -1217,6 +1221,19 @@ for cycle in range(3000):  # ~4 game years (memory learning across seasons)
             kmap.save(VAULT)
     except Exception:
         pass
+    # Phase W6: Ecology observations (wildlife, threats)
+    eco_obs = state.get("ecology_observations", [])
+    if eco_obs:
+        user_msg += "## 🦊 野生动物观察\n" + "\n".join(f"- {o}" for o in eco_obs[:4]) + "\n"
+    wolf_w = state.get("wolf_warning", "")
+    if wolf_w:
+        user_msg += f"🐺 {wolf_w}\n"
+    eco_alerts = state.get("ecology_alerts", [])
+    if eco_alerts:
+        user_msg += "## ⚠ 生态警报\n"
+        for a in eco_alerts[-3:]:
+            user_msg += f"- {a.get('description', '?')}\n"
+
     # Phase E1: Sensory observations (soil moisture color, leaf health, animal sounds, weather)
     sensory = state.get("sensory_observations", [])
     if sensory:

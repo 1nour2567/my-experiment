@@ -6,6 +6,7 @@ Same API protocol as real Agent World.
 """
 import http.server, json, re, time, uuid, random, threading, os, urllib.parse
 import sense_compiler  # data-driven NL sensory compiler (Phase E4)
+import ecology_engine  # Phase W6: wildlife ecosystem + farm interaction
 
 PORT_WORLD = 8080
 PORT_FARM  = 8081
@@ -392,6 +393,25 @@ def _do_day_advance(farm):
         idx = seasons.index(farm.get("season","Spring"))
         farm["season"] = seasons[(idx+1)%4]
         farm["year"] = farm.get("year", 1) + 1
+
+    # Phase W6: Ecology tick on day advance
+    global _ECOLOGY, _ecology_events
+    try:
+        farm_list = list(farms.values())
+        _ecology_events = _ECOLOGY.tick_day(farm_list)
+        # Attach ecology sensory to each affected farm
+        for evt in _ecology_events:
+            if evt.target_agent:
+                for fid, f in farms.items():
+                    if f.get("agent_id") == evt.target_agent:
+                        f.setdefault("ecology_alerts", []).append({
+                            "type": evt.event_type,
+                            "description": evt.description,
+                            "importance": evt.importance,
+                            "details": evt.details,
+                        })
+    except Exception:
+        pass  # ecology failure shouldn't crash the server
 
 # ══ PHASE D4: SLEEPINESS ══
 SLEEPINESS_MAX = 80
@@ -1821,6 +1841,11 @@ def route_farm(method, path, headers, body):
                                   "sprinkler": "sprinkler" in f.get("buildings",[]),
                                   "drip": "drip" in f.get("buildings",[])},
             "animal_disease_status": f.get("animal_disease_status", []),
+            # Phase W6: Ecology sensory + alerts
+            "ecology_observations": _ECOLOGY.get_sensory(f, "close")[:5],
+            "ecology_distant": _ECOLOGY.get_sensory(f, "distant")[:3],
+            "wolf_warning": _ECOLOGY.get_wolf_warning(f) or "",
+            "ecology_alerts": f.get("ecology_alerts", []),
             # Phase C fields
             "perennial_crops": f.get("perennial_crops", []),
             "intercrop_tiles": f.get("intercrop_tiles", []),
@@ -4259,6 +4284,10 @@ SAVE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "agent_worl
 if not os.path.exists(os.path.dirname(SAVE_FILE)):
     SAVE_FILE = r"C:\Users\m1916\agent-brain\agent_world_save.json"
 
+# Phase W6: Initialize ecology engine
+_ECOLOGY = ecology_engine.EcologyEngine()
+_ecology_events = []  # buffer for current-day events, flushed each cycle
+
 _last_save = 0
 
 def save_state():
@@ -4273,6 +4302,7 @@ def save_state():
             "farms": farms, "bar_sessions": bar_sessions,
             "guestbook": guestbook, "market_supply": market_supply,
             "active_loans": active_loans, "insurance_policies": insurance_policies,
+            "ecology": _ECOLOGY.to_dict(),  # Phase W6
         }
         with open(SAVE_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
@@ -4293,6 +4323,10 @@ def load_state():
             market_supply = data.get("market_supply", {})
             active_loans = data.get("active_loans", {})
             insurance_policies = data.get("insurance_policies", {})
+            # Phase W6: Restore ecology state
+            if "ecology" in data:
+                global _ECOLOGY
+                _ECOLOGY = ecology_engine.EcologyEngine.from_dict(data["ecology"])
             return True
     except Exception:
         pass

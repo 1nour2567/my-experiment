@@ -138,8 +138,41 @@ INTERRUPT_TRIGGERS = [
         "priority": 2,
         "cooldown_cycles": 4,
     },
+
+    # ── Phase W6: Ecology interrupts ──
+    {
+        "name": "wolf_attack",
+        "condition": lambda s, ctx: (
+            any(a.get("type") == "livestock_attack" for a in s.get("ecology_alerts", []))
+        ),
+        "message": lambda s, ctx: _wolf_attack_msg(s),
+        "priority": 1,  # P1: high-risk
+        "cooldown_cycles": 2,
+    },
+    {
+        "name": "crop_raided",
+        "condition": lambda s, ctx: (
+            any(a.get("type") == "crop_damage" and a.get("importance", 0) >= 4
+                for a in s.get("ecology_alerts", []))
+        ),
+        "message": lambda s, ctx: _crop_raided_msg(s),
+        "priority": 2,  # P2: advisory
+        "cooldown_cycles": 2,
+    },
 ]
 
+
+def _wolf_attack_msg(state):
+    alerts = [a for a in state.get("ecology_alerts", []) if a.get("type") == "livestock_attack"]
+    if alerts:
+        return f"🐺 紧急：{alerts[0].get('description', '牲畜被攻击')}——检查牲畜！"
+    return ""
+
+def _crop_raided_msg(state):
+    alerts = [a for a in state.get("ecology_alerts", []) if a.get("type") == "crop_damage" and a.get("importance", 0) >= 4]
+    if alerts:
+        return f"🐰 警告：{alerts[0].get('description', '作物被破坏')}——考虑修建围栏！"
+    return ""
 
 # ═══════════════════════════ CORE API ═══════════════════════════
 
