@@ -118,6 +118,11 @@ ACTION_TO_EVENT_TYPE = {
     # Phase W3: Books
     "read_book": "action_read_book",
     "buy_book": "economic_transaction",
+    # Phase W6: Trading
+    "trade_propose": "economic_trade",
+    "trade_accept": "economic_trade",
+    "trade_counter": "economic_trade",
+    "trade_reject": "economic_trade",
 }
 
 # ── Auto-tagging: action → default tags ──
@@ -131,6 +136,8 @@ ACTION_TAGS = {
     "sleep": ["body"], "eat": ["body"], "exercise": ["body"],
     "next_day": ["meta"], "remember": ["memory"], "recall": ["memory"],
     "social_msg": ["social"], "social_lookup": ["social"],
+    "trade_propose": ["economy", "trade"], "trade_accept": ["economy", "trade"],
+    "trade_counter": ["economy", "trade"], "trade_reject": ["economy", "trade"],
 }
 
 

@@ -64,6 +64,10 @@ BASE_ACTION_XP = {
     "read_book": {"scholarship": 10},
     "buy_book": {"scholarship": 2},
     "explore": {"exploration": 10, "scholarship": 3},
+    "trade_propose": {"scholarship": 3},
+    "trade_accept": {"scholarship": 3},
+    "trade_counter": {"scholarship": 3},
+    "trade_reject": {"scholarship": 1},
 }
 
 # Role-based XP multipliers (profession gets bonus in their domain)

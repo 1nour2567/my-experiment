@@ -60,6 +60,7 @@ import skill_tree       # Phase W1-2: SkillTree (XP + node unlocking)
 import knowledge_map    # Phase W1-3: KnowledgeMap (personal knowledge graph)
 import book_engine      # Phase W3: Book catalog + reading mechanics + writing
 import rumor_engine     # Phase W4: Rumor generation + verification
+import trade_engine      # Phase W6: Agent-to-agent trading system
 
 # ═══════════════ LLM CALL =══════════════
 
@@ -536,6 +537,15 @@ The farm world has other agents! You can see them listed in your context.
 Social interactions build trust and can lead to skill sharing. The more you interact,
 the more you learn from each other.
 
+## 💼 TRADING — Exchange with other farmers
+You can trade items with other agents! Everyone has different skills and resources.
+**Use `trade_propose(target, offer, request)` to propose a trade.**
+Example: `trade_propose("iron_lady", {"wheat": 20}, {"iron_hoe": 1})` — offer 20 wheat for 1 iron hoe.
+**Use `trade_accept(trade_id)` to accept a pending trade directed at you.**
+**Use `trade_counter(trade_id, new_offer, new_request)` to negotiate — modify terms and send back.**
+**Use `trade_reject(trade_id)` to decline.**
+Trades build trust. Reneging (accepting when you lack items) damages your reputation.
+
 ## 📚 BOOKS — Read to learn and grow
 You can read books from your library! Books give skill XP, unlock knowledge, and change your personality.
 **Use `read_book` to read one chapter.** Each book has 2-5 chapters.
@@ -681,6 +691,9 @@ _BOOK_LIBRARY = _BOOK_ENGINE.get_library(_prof.id)
 
 # Phase W4+: Initialize rumor engine
 _RUMOR_ENGINE = rumor_engine.RumorEngine()
+
+# Phase W6: Initialize trade engine
+_TRADE_ENGINE = trade_engine.TradeEngine(PARENT_VAULT)
 # Auto-add a starter book for new agents
 if not _BOOK_LIBRARY:
     _BOOK_ENGINE.add_book_to_library(_prof.id, "wheat_guide", cycle=0)
@@ -1186,6 +1199,16 @@ for cycle in range(3000):  # ~4 game years (memory learning across seasons)
             user_msg += "(你可以对他们发送 social_msg 或查看他们的农场 social_lookup)\n"
     except Exception as _e:
         print(f"  [SOCIAL WARN] {str(_e)[:80]}".encode('ascii','replace').decode('ascii'))
+    # Phase W6: Show pending trade proposals
+    try:
+        pending = _TRADE_ENGINE.list_pending_for(_prof.id)
+        if pending:
+            user_msg += "## 💼 待处理的交易提议\n"
+            for t in pending[:2]:
+                user_msg += f"- 来自 **{t.from_agent}**：用 **{trade_engine.TradeEngine._format_items(t.offer)}** 换 **{trade_engine.TradeEngine._format_items(t.request)}** (ID: `{t.trade_id}`)\n"
+            user_msg += "回复: `trade_accept(trade_id)` / `trade_counter(...)` / `trade_reject(trade_id)`\n"
+    except Exception:
+        pass
     # Phase W3: Book library + reading suggestions
     try:
         lib = _BOOK_ENGINE.get_library(_prof.id)
@@ -1523,6 +1546,56 @@ for cycle in range(3000):  # ~4 game years (memory learning across seasons)
                     result_msg = f"没找到《{book_id}》这本书"
                 else:
                     result_msg = f"金币不够——{book_def['title']}要{book_def['buy_price']}G"
+                ok = True; resp = {"success": True, "message": result_msg}
+                break
+            elif action in ("trade_propose", "trade_accept", "trade_reject", "trade_counter"):
+                # Phase W6-2: Agent-to-agent trading
+                trade_target = params.get("target", "")
+                if action == "trade_propose":
+                    offer = params.get("offer", {})
+                    request = params.get("request", {})
+                    if isinstance(offer, str):
+                        try: offer = json.loads(offer)
+                        except: offer = {}
+                    if isinstance(request, str):
+                        try: request = json.loads(request)
+                        except: request = {}
+                    if not offer or not request:
+                        result_msg = "trade_propose needs 'offer' and 'request' dicts"
+                    else:
+                        tres = _TRADE_ENGINE.propose(_prof.id, trade_target, offer, request, state)
+                        result_msg = tres["message"]
+                elif action == "trade_accept":
+                    tid = params.get("trade_id", "")
+                    if not tid:
+                        result_msg = "trade_accept needs 'trade_id'"
+                    else:
+                        tres = _TRADE_ENGINE.accept(tid, _prof.id, state, _prof)
+                        result_msg = tres["message"]
+                        if tres.get("exchange"):
+                            lookup_result = f"💼 交易成功！{tres['message']}"
+                elif action == "trade_counter":
+                    tid = params.get("trade_id", "")
+                    new_offer = params.get("offer", {})
+                    new_request = params.get("request", {})
+                    if isinstance(new_offer, str):
+                        try: new_offer = json.loads(new_offer)
+                        except: new_offer = {}
+                    if isinstance(new_request, str):
+                        try: new_request = json.loads(new_request)
+                        except: new_request = {}
+                    if not tid:
+                        result_msg = "trade_counter needs 'trade_id'"
+                    else:
+                        tres = _TRADE_ENGINE.counter(tid, _prof.id, new_offer or {}, new_request or {}, state, _prof.display_name)
+                        result_msg = tres["message"]
+                elif action == "trade_reject":
+                    tid = params.get("trade_id", "")
+                    if not tid:
+                        result_msg = "trade_reject needs 'trade_id'"
+                    else:
+                        tres = _TRADE_ENGINE.reject(tid, _prof.id, _prof.display_name)
+                        result_msg = tres["message"]
                 ok = True; resp = {"success": True, "message": result_msg}
                 break
             elif action == "explore":
