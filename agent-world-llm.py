@@ -58,6 +58,7 @@ import interrupt_system  # Phase E6: emergency interrupt detection
 import agent_profile    # Phase W1-1: AgentProfile (identity + personality + skills)
 import skill_tree       # Phase W1-2: SkillTree (XP + node unlocking)
 import knowledge_map    # Phase W1-3: KnowledgeMap (personal knowledge graph)
+import book_engine      # Phase W3: Book catalog + reading mechanics + writing
 
 # ═══════════════ LLM CALL =══════════════
 
@@ -534,6 +535,13 @@ The farm world has other agents! You can see them listed in your context.
 Social interactions build trust and can lead to skill sharing. The more you interact,
 the more you learn from each other.
 
+## 📚 BOOKS — Read to learn and grow
+You can read books from your library! Books give skill XP, unlock knowledge, and change your personality.
+**Use `read_book` to read one chapter.** Each book has 2-5 chapters.
+**Use `read_book(book_id="wheat_guide")` to read a specific book, or just `read_book` to auto-read.**
+**Use `buy_book(book_id="soil_science")` to buy from the market.**
+Reading at night requires a lamp. Story books reduce fatigue!
+
 ## 📖 Building Prices (you CAN afford these!)
 | Building | Cost | Days | Effect |
 |----------|------|------|--------|
@@ -658,6 +666,15 @@ _AGENT_PERSONA = _prof.personality_snippet()
 _AGENT_SKILL_SUMMARY = _SKILL_TREE.get_skill_summary(
     _prof.get_skill_level("farming"), _prof.skills.get("farming", {}).get("xp", 0)
 )
+
+# Phase W3: Initialize book engine
+_BOOK_ENGINE = book_engine.BookEngine(PARENT_VAULT)
+_BOOK_LIBRARY = _BOOK_ENGINE.get_library(_prof.id)
+# Auto-add a starter book for new agents
+if not _BOOK_LIBRARY:
+    _BOOK_ENGINE.add_book_to_library(_prof.id, "wheat_guide", cycle=0)
+    _BOOK_LIBRARY = _BOOK_ENGINE.get_library(_prof.id)
+    print(f"  Starter book: wheat_guide added to library")
 
 # ═══════════════ REGISTER =══════════════
 
@@ -1109,6 +1126,21 @@ for cycle in range(3000):  # ~4 game years (memory learning across seasons)
             user_msg += "(你可以对他们发送 social_msg 或查看他们的农场 social_lookup)\n"
     except Exception:
         pass
+    # Phase W3: Book library + reading suggestions
+    try:
+        lib = _BOOK_ENGINE.get_library(_prof.id)
+        progress = _BOOK_ENGINE.reading_progress_snippet(lib)
+        if progress:
+            user_msg += progress + "\n"
+        # If night and agent has unread books, suggest reading
+        is_night = state.get("is_night", False)
+        if is_night:
+            can, reason, readable = _BOOK_ENGINE.can_read(_prof, lib, is_night)
+            if can and readable:
+                next_book = readable[0]
+                user_msg += f"🌙 夜晚无事——书架上还有未读完的《{next_book.title}》（已读{next_book.chapters_read}/{next_book.chapters}章）。可以用 read_book 阅读。\n"
+    except Exception:
+        pass
     # Phase E1: Sensory observations (soil moisture color, leaf health, animal sounds, weather)
     sensory = state.get("sensory_observations", [])
     if sensory:
@@ -1332,7 +1364,56 @@ for cycle in range(3000):  # ~4 game years (memory learning across seasons)
                     result_msg = "social_lookup needs target agent"
                 ok = True; resp = {"success": True, "message": result_msg}
                 break
-            else:
+            elif action == "read_book":
+                # Phase W3: Read one chapter of a specific book using the book engine
+                book_id = params.get("book_id", "")
+                if not book_id:
+                    # Auto-pick first unfinished book
+                    lib = _BOOK_ENGINE.get_library(_prof.id)
+                    can, reason, readable = _BOOK_ENGINE.can_read(
+                        _prof, lib, state.get("is_night", False),
+                        has_lamp="lamp" in _prof.inventory.get("tools_owned", [])
+                    )
+                    if not can:
+                        result_msg = reason
+                    elif readable:
+                        book_id = readable[0].book_id
+                    else:
+                        result_msg = "没有可读的书"
+                if book_id:
+                    lib = _BOOK_ENGINE.get_library(_prof.id)
+                    target_book = None
+                    for b in lib:
+                        if b.book_id == book_id:
+                            target_book = b; break
+                    if target_book:
+                        result = _BOOK_ENGINE.read_chapter(_prof, target_book)
+                        result_msg = result["message"]
+                        if result.get("fact_unlocked"):
+                            lookup_result = f"📖 新知识: {result['fact_unlocked']['description']}"
+                    else:
+                        result_msg = f"书架上没有这本书: {book_id}"
+                ok = True; resp = {"success": True, "message": result_msg}
+                # Save library after each read
+                _BOOK_ENGINE.save_library(_prof.id, lib)
+                break
+            elif action == "buy_book":
+                # Phase W3: Buy a book from the market
+                book_id = params.get("book_id", "")
+                book_def = _BOOK_ENGINE.get_book_def(book_id)
+                if book_def and book_def.get("buy_price", 0) <= state.get("gold", 0):
+                    owned = _BOOK_ENGINE.add_book_to_library(_prof.id, book_id, cycle)
+                    if owned:
+                        result_msg = f"买入《{book_def['title']}》（{book_def['buy_price']}G），已加入书架"
+                        state["gold"] -= book_def["buy_price"]
+                    else:
+                        result_msg = "购买失败"
+                elif not book_def:
+                    result_msg = f"没找到《{book_id}》这本书"
+                else:
+                    result_msg = f"金币不够——{book_def['title']}要{book_def['buy_price']}G"
+                ok = True; resp = {"success": True, "message": result_msg}
+                break
                 body = {"agent_id": AID, "action_type": action}
                 body.update(params)
                 r = requests.post(f"{BASE_FARM}/api/farm/{FID}/action",

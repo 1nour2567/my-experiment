@@ -1,0 +1,210 @@
+{
+  "version": "1.0.0",
+  "description": "Agent Farm book catalog. Books are physical items agents can own, read, trade, and write.",
+  "categories": {
+    "skill": {"icon": "📘", "desc": "技能书 — 提供技能经验，解锁技能树节点"},
+    "science": {"icon": "🔬", "desc": "科普书 — 解锁世界观知识，发现事实"},
+    "philosophy": {"icon": "📜", "desc": "哲学书 — 改变性格权重，引发偏好漂移"},
+    "history": {"icon": "📚", "desc": "历史书 — 注入跨年记忆，如同亲身经历"},
+    "story": {"icon": "📖", "desc": "故事书 — 随机微调偏好，提供娱乐降低疲劳"},
+    "diary": {"icon": "📝", "desc": "日记 — agent 自己写或他人的记录，深度了解"}
+  },
+  "reading_mechanics": {
+    "chapters_per_book": {"min": 2, "max": 5},
+    "minutes_per_chapter": 30,
+    "chapters_per_read_action": 1,
+    "literacy_requirement": {
+      "skill": 0.2,
+      "science": 0.4,
+      "philosophy": 0.6,
+      "history": 0.4,
+      "story": 0.1,
+      "diary": 0.0
+    },
+    "lighting_requirement": "daytime OR lamp_owned"
+  },
+  "books": [
+    {
+      "id": "wheat_guide",
+      "title": "小麦种植指南",
+      "author": "农业局",
+      "category": "skill",
+      "chapters": 4,
+      "description": "从播种到收割的完整小麦种植技术。",
+      "rarity": "common",
+      "buy_price": 50,
+      "effects": {
+        "skill_xp": {"farming": 40},
+        "unlocks_fact": null,
+        "preference_shift": null,
+        "fatigue_recovery": 0
+      }
+    },
+    {
+      "id": "pasture_economics",
+      "title": "牧场经济学",
+      "author": "畜牧研究所",
+      "category": "science",
+      "chapters": 4,
+      "description": "系统分析温带草原放牧的经济优势。草原牧草蛋白质含量更高，羊群日增重可提升15%。",
+      "rarity": "uncommon",
+      "buy_price": 120,
+      "effects": {
+        "skill_xp": null,
+        "unlocks_fact": {
+          "id": "grassland_pasture",
+          "description": "温带草原适合大规模放牧，牧草蛋白质含量高，羊群日增重可提升15%"
+        },
+        "preference_shift": {"animal_affinity": 0.15},
+        "fatigue_recovery": 0
+      }
+    },
+    {
+      "id": "uncertainty_gift",
+      "title": "不确定性的礼物",
+      "author": "无名哲人",
+      "category": "philosophy",
+      "chapters": 5,
+      "description": "一本关于接受风险和不确定性的哲学思考。读完可能会让你更敢于尝试新事物。",
+      "rarity": "rare",
+      "buy_price": 200,
+      "effects": {
+        "skill_xp": null,
+        "unlocks_fact": null,
+        "preference_shift": {
+          "risk_appetite_modifier": 0.15,
+          "exploration_urge": 0.10
+        },
+        "fatigue_recovery": 0
+      }
+    },
+    {
+      "id": "great_drought",
+      "title": "三年大旱纪",
+      "author": "前朝史官",
+      "category": "history",
+      "chapters": 3,
+      "description": "记录了一场持续三年的毁灭性旱灾。读后会深刻理解储粮和水利的重要性。",
+      "rarity": "uncommon",
+      "buy_price": 100,
+      "effects": {
+        "skill_xp": null,
+        "unlocks_fact": {
+          "id": "drought_preparation",
+          "description": "历史教训：大旱之年，存粮比存钱更重要。提前建造蓄水池可大幅降低旱灾损失"
+        },
+        "preference_shift": {
+          "drainage_anxiety": 0.10,
+          "frugality_habit": 0.10,
+          "building_interest": 0.05
+        },
+        "fatigue_recovery": 0
+      }
+    },
+    {
+      "id": "robinson_crusoe",
+      "title": "鲁滨逊漂流记",
+      "author": "笛福",
+      "category": "story",
+      "chapters": 5,
+      "description": "一个人在荒岛上生存的故事。读完后让人对自给自足的生活充满向往。",
+      "rarity": "common",
+      "buy_price": 60,
+      "effects": {
+        "skill_xp": null,
+        "unlocks_fact": null,
+        "preference_shift": {
+          "exploration_urge": 0.08,
+          "crafting_drive": 0.05
+        },
+        "fatigue_recovery": 15
+      }
+    },
+    {
+      "id": "soil_science",
+      "title": "土壤的科学",
+      "author": "农业大学",
+      "category": "science",
+      "chapters": 4,
+      "description": "深入讲解土壤NPK循环、有机质管理和表土保护。",
+      "rarity": "uncommon",
+      "buy_price": 150,
+      "effects": {
+        "skill_xp": null,
+        "unlocks_fact": {
+          "id": "soil_conservation",
+          "description": "覆盖作物和mulch可以有效防止表土流失。有机质>5%时作物品质概率显著提升"
+        },
+        "preference_shift": {"building_interest": 0.05},
+        "fatigue_recovery": 0
+      }
+    },
+    {
+      "id": "forge_mastery",
+      "title": "锻造之道",
+      "author": "铁匠行会",
+      "category": "skill",
+      "chapters": 3,
+      "description": "从选矿到淬火的完整锻造技术手册。",
+      "rarity": "uncommon",
+      "buy_price": 180,
+      "effects": {
+        "skill_xp": {"construction": 60},
+        "unlocks_fact": null,
+        "preference_shift": {"crafting_drive": 0.10},
+        "fatigue_recovery": 0
+      }
+    },
+    {
+      "id": "herbal_medicine",
+      "title": "草木药典",
+      "author": "乡间郎中",
+      "category": "science",
+      "chapters": 4,
+      "description": "常见动物疾病的草药疗法。森林中的某些植物可以替代昂贵的兽药。",
+      "rarity": "rare",
+      "buy_price": 250,
+      "effects": {
+        "skill_xp": null,
+        "unlocks_fact": {
+          "id": "forest_herbs",
+          "description": "森林中生长的金银花和蒲公英可制成廉价兽药，治疗动物轻度疾病"
+        },
+        "preference_shift": {"animal_affinity": 0.10},
+        "fatigue_recovery": 0
+      }
+    },
+    {
+      "id": "water_wisdom",
+      "title": "治水要略",
+      "author": "水利工程院",
+      "category": "philosophy",
+      "chapters": 3,
+      "description": "古人治水的哲学：顺势而为，不逆水行舟。既不要怕水，也不要轻视水的力量。",
+      "rarity": "uncommon",
+      "buy_price": 130,
+      "effects": {
+        "skill_xp": null,
+        "unlocks_fact": {"id": "water_management", "description": "排水和灌溉是同一枚硬币的两面。过度排水和过度浇水同样有害"},
+        "preference_shift": {"drainage_anxiety": -0.10},
+        "fatigue_recovery": 0
+      }
+    },
+    {
+      "id": "farmer_diary_template",
+      "title": "农夫的日记",
+      "author": "写作中的agent",
+      "category": "diary",
+      "chapters": 1,
+      "description": "一本还未写完的日记。",
+      "rarity": "unique",
+      "buy_price": 0,
+      "effects": {
+        "skill_xp": null,
+        "unlocks_fact": null,
+        "preference_shift": null,
+        "fatigue_recovery": 5
+      }
+    }
+  ]
+}

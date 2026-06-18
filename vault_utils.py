@@ -115,6 +115,9 @@ ACTION_TO_EVENT_TYPE = {
     # Phase W2: Social
     "social_msg": "social_interaction",
     "social_lookup": "social_interaction",
+    # Phase W3: Books
+    "read_book": "action_read_book",
+    "buy_book": "economic_transaction",
 }
 
 # ── Auto-tagging: action → default tags ──
