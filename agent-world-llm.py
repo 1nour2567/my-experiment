@@ -1122,7 +1122,49 @@ for cycle in range(3000):  # ~4 game years (memory learning across seasons)
             with open(inbox_path, "r", encoding="utf-8") as _ibf:
                 inbox_content = _ibf.read()
             if inbox_content.strip():
-                user_msg += f"## 💬 收到的消息\n{inbox_content[-600:]}\n"
+                # Parse sender time metadata for time-diff display
+                import re as _re
+                _time_match = _re.search(r'<!-- sender_time: (\w+)\|(\d+)\|(\d+)\|([\d.]+) -->', inbox_content)
+                time_note = ""
+                if _time_match:
+                    s_season, s_day, s_year, s_hour = _time_match.group(1), int(_time_match.group(2)), int(_time_match.group(3)), float(_time_match.group(4))
+                    my_season = state.get("season", "?")
+                    my_day = state.get("day", 0)
+                    my_year = state.get("year", 1)
+                    seasons = ["Spring", "Summer", "Fall", "Winter"]
+                    try:
+                        sender_pos = s_year * 4 + seasons.index(s_season)
+                        my_pos = my_year * 4 + seasons.index(my_season)
+                        season_diff = my_pos - sender_pos
+                        if season_diff == 0:
+                            day_diff = my_day - s_day
+                            if day_diff == 0:
+                                time_note = f" (几小时前)"
+                            elif day_diff == 1:
+                                time_note = f" (昨天)"
+                            else:
+                                time_note = f" ({day_diff}天前)"
+                        elif season_diff == 1:
+                            time_note = f" (上季末)"
+                        else:
+                            time_note = f" ({season_diff}季前, {s_season} Y{s_year})"
+                    except:
+                        pass
+
+                user_msg += f"## 💬 收到的消息{time_note}\n{inbox_content[-600:]}\n"
+
+                # Phase W5+: Generative Agents — store message in memory instead of discarding
+                sender_line = [l for l in inbox_content.split("\n") if l.startswith("### ") and " — " in l]
+                sender_name = sender_line[0].split("### ")[1].split(" — ")[0].strip() if sender_line else "someone"
+                # Extract message body (skip metadata lines)
+                msg_lines = [l for l in inbox_content.split("\n") if l.strip() and not l.startswith("<!--") and not l.startswith("###")]
+                msg_body = " ".join(msg_lines).strip()[:200]
+                if msg_body:
+                    _memory_handle("remember", {
+                        "topic": f"from_{sender_name}",
+                        "content": msg_body
+                    }, state)
+
             # Clear after reading
             open(inbox_path, "w", encoding="utf-8").close()
         # List other known agents
@@ -1369,7 +1411,11 @@ for cycle in range(3000):  # ~4 game years (memory learning across seasons)
                     inbox_dir = os.path.join(PARENT_VAULT, "social")
                     os.makedirs(inbox_dir, exist_ok=True)
                     inbox_path = os.path.join(inbox_dir, f"{target}_inbox.md")
-                    entry = f"\n### {_prof.display_name} ({state.get('season','?')}D{state.get('day',0)} Y{state.get('year',1)})\n{msg}\n"
+                    entry = (f"\n### {_prof.display_name} — "
+                             f"{state.get('season','?')} D{state.get('day',0)} Y{state.get('year',1)}, "
+                             f"🕐{state.get('hour',0):.0f}:00\n"
+                             f"<!-- sender_time: {state.get('season','?')}|{state.get('day',0)}|{state.get('year',1)}|{state.get('hour',0):.1f} -->\n"
+                             f"{msg}\n")
                     with open(inbox_path, "a", encoding="utf-8") as _inf:
                         _inf.write(entry)
                     result_msg = f"Sent message to {target}: {msg[:100]}"
