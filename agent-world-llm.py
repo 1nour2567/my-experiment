@@ -29,6 +29,7 @@ VAULT = r"C:\Users\m1916\agent-brain"
 
 # ═══════════════ SHARED VAULT UTILS =══════════════
 import vault_utils as vu
+import importance_scorer  # Phase E5: event importance scoring + memory synthesis
 
 # ═══════════════ LLM CALL =══════════════
 
@@ -784,6 +785,9 @@ _last_failed = {"action": None, "count": 0}  # repeated failure tracking
 _last_past_report = ""  # Phase E2: past season report for cross-year learning
 # Memory usage tracking
 mem_uses = {"remember": 0, "recall": 0, "forget": 0}
+# Phase E5: Importance scoring + memory synthesis
+_synthesizer = importance_scorer.MemorySynthesizer(VAULT)
+_prev_day_key = None  # Phase E5: track day changes for memory synthesis
 def find_decisions(vault_root):
     """Count decision day files in vault."""
     d = os.path.join(vault_root, "decisions")
@@ -841,6 +845,23 @@ for cycle in range(3000):  # ~4 game years (memory learning across seasons)
         "available_contracts": d.get("available_contracts", []),
         "signed_contracts": d.get("signed_contracts", []),
     }
+
+    # Phase E5: Detect day change and trigger memory synthesis for old day
+    current_day_key = f"{state.get('year',1)}-{state.get('season','?')}-{state.get('day',0)}"
+    if _prev_day_key is not None and current_day_key != _prev_day_key:
+        # Day just changed (via next_day or sleep-midnight). Score + filter old day.
+        old_parts = _prev_day_key.split("-")
+        if len(old_parts) == 3:
+            try:
+                old_y, old_s, old_d = int(old_parts[0]), old_parts[1], int(old_parts[2])
+                synth_result = _synthesizer.synthesize_day(old_s, old_y, old_d)
+                if synth_result.get('high_importance_count', 0) > 0:
+                    print(f"  [MEM-SYNTH] {old_s}D{old_d} Y{old_y}: {synth_result['high_importance_count']} important events scored ({synth_result['scored_count']} total)")
+                    summary_path = f"knowledge/history/Y{old_y}-{old_s}-D{old_d:02d}-synthesis.md"
+                    vwrite(summary_path, synth_result.get('summary', ''))
+            except Exception as e:
+                print(f"  [MEM-SYNTH WARN] {e}".encode('ascii','replace').decode('ascii'))
+    _prev_day_key = current_day_key
 
     # ═══ IMMEDIATE STATE PERSIST: write farm snapshot before LLM call ═══
     try:
@@ -1318,6 +1339,23 @@ Output valid JSON only."""
     if current_season != _last_report_season:
         _season_report(state)
         _last_report_season = current_season
+        # Phase E5: Season-end reflection from high-importance events
+        try:
+            seasons = ["Spring", "Summer", "Fall", "Winter"]
+            s = state.get("season", "?")
+            idx = seasons.index(s) if s in seasons else 0
+            prev_idx = (idx - 1) % 4
+            prev_season = seasons[prev_idx]
+            prev_year = state.get("year", 1) - 1 if prev_idx == 3 else state.get("year", 1)
+            reflection = _synthesizer.generate_reflection(prev_season, prev_year)
+            if reflection:
+                ref_path = f"knowledge/learned/reflection-Y{prev_year}-{prev_season}.md"
+                vwrite(ref_path, reflection)
+                ref_path2 = f"memory/reflections/Y{prev_year}-{prev_season}.md"
+                vwrite(ref_path2, reflection)
+                print(f"  [REFLECTION] {prev_season} Y{prev_year}: stored to knowledge/learned/")
+        except Exception as e:
+            print(f"  [REFLECTION WARN] {e}".encode('ascii','replace').decode('ascii'))
     past_report = _inject_past_season_report(state)
     if past_report and "## 📊 去年" in past_report:
         # Store for next cycle injection (appended to user_msg)
@@ -1328,7 +1366,7 @@ Output valid JSON only."""
         extra = f" GDD={resp['gdd_today']} crops={resp.get('crop_gdd',[])}"
     log_lines.append(f"[{now}] {action}: {result_msg[:100]}{extra}")
 
-    # Phase 0: JSONL decision log
+    # Phase 0: JSONL decision log (FarmEvent Schema v1.1.0)
     vu.log_decision(VAULT, cid, state, action, params, ok, result_msg)
 
     # 6. BAR visit (rare, and only if agent has gold)
