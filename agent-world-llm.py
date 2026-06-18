@@ -30,6 +30,7 @@ VAULT = r"C:\Users\m1916\agent-brain"
 # ═══════════════ SHARED VAULT UTILS =══════════════
 import vault_utils as vu
 import importance_scorer  # Phase E5: event importance scoring + memory synthesis
+import interrupt_system  # Phase E6: emergency interrupt detection
 
 # ═══════════════ LLM CALL =══════════════
 
@@ -850,6 +851,8 @@ for cycle in range(3000):  # ~4 game years (memory learning across seasons)
     current_day_key = f"{state.get('year',1)}-{state.get('season','?')}-{state.get('day',0)}"
     if _prev_day_key is not None and current_day_key != _prev_day_key:
         # Day just changed (via next_day or sleep-midnight). Score + filter old day.
+        # Reset interrupt cooldowns for the new day.
+        interrupt_system.reset_cooldowns()
         old_parts = _prev_day_key.split("-")
         if len(old_parts) == 3:
             try:
@@ -1043,6 +1046,16 @@ for cycle in range(3000):  # ~4 game years (memory learning across seasons)
     if mem_context:
         user_msg += f"\n{mem_context}\n"
     user_msg += "\n→ Output valid JSON. Keep thoughts < 80 chars."
+
+    # Phase E6: Emergency interrupt detection — prepend urgent warnings if needed
+    interrupt_context = interrupt_system.check_interrupts(state, {
+        "last_failed": _last_failed,
+        "cycle": cycle,
+    })
+    if interrupt_context["active"]:
+        user_msg = interrupt_context["header"] + user_msg
+        fired_names = ", ".join(t["name"] for t in interrupt_context["fired"])
+        print(f"  [INTERRUPT] {fired_names} — injecting urgent prompt header")
 
     decision = ask_llm_structured(SYSTEM_PROMPT + "\n\n" + OUTPUT_FORMAT, user_msg)
     if decision is None:
