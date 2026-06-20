@@ -190,37 +190,29 @@ def execute_action(action: str, params: dict, state: dict, *,
                 if not target_name or not item_type:
                     result_msg = "send_gift needs target and item"
                 else:
-                    # Resolve target to profile ID
-                    resolved = agent_profile.resolve_agent_name(PARENT_VAULT, target_name)
-                    inbox_dir = os.path.join(PARENT_VAULT, "social")
-                    os.makedirs(inbox_dir, exist_ok=True)
-                    gift_msg = f"🎁 {_prof.display_name}送来了 {item_type} ×{qty}"
-                    for inbox_name in [resolved, target_name]:
-                        ip = os.path.join(inbox_dir, f"{inbox_name}_inbox.md")
-                        with open(ip, "a", encoding="utf-8") as _gf:
-                            _gf.write(f"\n### {gift_msg}\n")
-                    result_msg = f"Sent gift to {target_name}: {item_type} ×{qty}"
-                ok = True; resp = {"success": True, "message": result_msg}
+                    # Send through server API — authentic transfer, not local file
+                    body = {"agent_id": AID, "action_type": "send_gift",
+                            "target": target_name, "item": item_type, "qty": qty}
+                    r = requests.post(f"{BASE_FARM}/api/farm/{FID}/action",
+                        json=body, headers=HDRS, proxies=PROX, timeout=10)
+                    resp = r.json() if r.headers.get('content-type','').startswith('application/json') else {"message": r.text[:300]}
+                    ok = resp.get("success", r.status_code == 200)
+                    result_msg = resp.get("message", resp.get("action_result", str(resp)[:300]))
                 break
             elif action == "send_gold":
                 target_name = params.get("target", "").strip()
                 amount = int(params.get("amount", 0))
                 if not target_name or amount <= 0:
                     result_msg = "send_gold needs target and amount"
-                elif amount > state.get("gold", 0):
-                    result_msg = f"Not enough gold: need {amount}G, have {state['gold']}G"
                 else:
-                    resolved = agent_profile.resolve_agent_name(PARENT_VAULT, target_name)
-                    inbox_dir = os.path.join(PARENT_VAULT, "social")
-                    os.makedirs(inbox_dir, exist_ok=True)
-                    gold_msg = f"💰 {_prof.display_name}转来了 {amount}G"
-                    for inbox_name in [resolved, target_name]:
-                        ip = os.path.join(inbox_dir, f"{inbox_name}_inbox.md")
-                        with open(ip, "a", encoding="utf-8") as _gf:
-                            _gf.write(f"\n### {gold_msg}\n")
-                    state["gold"] -= amount
-                    result_msg = f"Sent {amount}G to {target_name}"
-                ok = True; resp = {"success": True, "message": result_msg}
+                    # Send through server API — authentic gold transfer
+                    body = {"agent_id": AID, "action_type": "send_gold",
+                            "target": target_name, "amount": amount}
+                    r = requests.post(f"{BASE_FARM}/api/farm/{FID}/action",
+                        json=body, headers=HDRS, proxies=PROX, timeout=10)
+                    resp = r.json() if r.headers.get('content-type','').startswith('application/json') else {"message": r.text[:300]}
+                    ok = resp.get("success", r.status_code == 200)
+                    result_msg = resp.get("message", resp.get("action_result", str(resp)[:300]))
                 break
             elif action == "read_book":
                 book_id = params.get("book_id", "")
