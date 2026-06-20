@@ -3900,9 +3900,14 @@ def route_farm(method, path, headers, body):
                                 f["score"] = f.get("score", 0) + 25
                                 break
 
-        # ═══ DAY ADVANCE (now handled by day_barrier — all agents sync at midnight) ═══
-        # Individual next_day is deprecated; agents use sleep to reach 24:00.
-        # _check_day_barrier() in the sleep handler advances all farms together.
+        # ═══ DAY ADVANCE — push all farms to the shared barrier ═══
+        # When ANY agent calls next_day, force ALL agents to midnight
+        # so the day barrier advances everyone together.
+        for fid2 in farms:
+            if farms[fid2].get("agent_id") in _active_session_agents:
+                farms[fid2]["hour"] = 24.0
+                _day_barrier[fid2] = True
+        _check_day_barrier()
 
         # ═══════════ TRUE DAY BOUNDARY ═══════════
 
