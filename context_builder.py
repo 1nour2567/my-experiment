@@ -26,6 +26,25 @@ def build_user_message(state, *, cycle: int, log_lines: list,
     # ── Build shop ──
     current_season = state.get("season", "Spring")
     shop_items = []
+    # Initialize variables that may not be set in all code paths
+    new_lookup_result = ""
+    
+    # ── Shared world threats (same for all agents on same day) ──
+    day_seed = state.get("year",1)*1000 + state.get("day",1)*10 + {"Spring":1,"Summer":2,"Fall":3,"Winter":4}.get(state.get("season","Spring"),1)
+    import hashlib, random as _random
+    _rng = _random.Random(int(hashlib.md5(f"threat_{day_seed}".encode()).hexdigest()[:8], 16))
+    threat_roll = _rng.random()
+    shared_threat_msg = ""
+    if threat_roll < 0.25:  # 25% chance per day of a shared threat
+        threats = [
+            "🐺 狼群警报！狼群正在逼近家族农场——围栏是唯一的防线。用 bulletin_post 通知全家人！",
+            "🌊 洪水预警！上游大坝裂缝，低洼地可能被淹。立刻告诉家人——祖父的治疗费不能毁于一场洪水。",
+            "🐰 野兔泛滥！今年春天异常温暖，野兔繁殖速度翻倍。单靠一个人挡不住——全家人必须一起建围栏。",
+            "🦅 鹰群来袭！小鸡和幼畜危险。用 bulletin_post 协调全家的防御策略——每一只牲畜都是祖父的医药费。",
+        ]
+        shared_threat_msg = f"## ⚠️ 家族危机 — 影响全家人\n{_rng.choice(threats)}\n\n"
+    
+    # ── Build shop ──
     for k, c in CROPS.items():
         if current_season in c.get("seasons", []):
             shop_items.append(f"SEED:{k}(GDD={c['gdd_req']},buy={c['buy']},sell={c['sell']})")
@@ -72,6 +91,10 @@ def build_user_message(state, *, cycle: int, log_lines: list,
     )
 
     user_msg = dashboard + f"Inv: {json.dumps({k:v for k,v in state.get('inventory',{}).items() if v>0}, ensure_ascii=False)}"
+    # Shared threats (25% chance per day)
+    user_msg += shared_threat_msg
+    # Community status reminder
+    user_msg += "\n👨‍👩‍👦 家族: 续仁武、铁娘子、老王是一家人 | 目标: 攒钱给祖父治病 | bulletin_post | bulletin_read | social_msg\n"
 
     # Livestock
     if state.get("livestock"):
@@ -180,8 +203,22 @@ def build_user_message(state, *, cycle: int, log_lines: list,
     user_msg += "\n→ Output valid JSON. Keep thoughts < 80 chars."
 
     # ── Social awareness ──
+    hour = state.get("hour", 7.0)
+    is_mail_time = (21.0 <= hour < 24.0)  # 21:00 is mail check time
+    
     try:
-        inbox_path = os.path.join(PARENT_VAULT, "social", f"{_prof.id}_inbox.md")
+        # Check inbox under both profile ID and display name (LLM may use either)
+        inbox_candidates = [
+            os.path.join(PARENT_VAULT, "social", f"{_prof.id}_inbox.md"),
+            os.path.join(PARENT_VAULT, "social", f"{_prof.display_name}_inbox.md"),
+        ]
+        inbox_path = None
+        for cand in inbox_candidates:
+            if os.path.exists(cand) and os.path.getsize(cand) > 0:
+                inbox_path = cand; break
+        # Fallback: first candidate
+        if inbox_path is None:
+            inbox_path = inbox_candidates[0]
         if os.path.exists(inbox_path):
             with open(inbox_path, "r", encoding="utf-8") as _ibf:
                 inbox_content = _ibf.read()
@@ -208,7 +245,12 @@ def build_user_message(state, *, cycle: int, log_lines: list,
                     except Exception:
                         pass
 
-                user_msg += f"## 💬 收到的消息{time_note}\n{inbox_content[-600:]}\n"
+                # Highlight inbox at mail time (21:00), regular otherwise
+                if is_mail_time:
+                    user_msg += f"## 📬 收信时间 (21:00) — 你有新消息{time_note}\n{inbox_content[-600:]}\n"
+                    user_msg += "💡 现在是晚间收信时间。你可以回复消息(social_msg)、查看留言栏(bulletin_read)、或发布公告(bulletin_post)。\n"
+                else:
+                    user_msg += f"## 💬 收到的消息{time_note}\n{inbox_content[-600:]}\n"
 
                 sender_line = [l for l in inbox_content.split("\n") if l.startswith("### ") and " — " in l]
                 sender_name = sender_line[0].split("### ")[1].split(" — ")[0].strip() if sender_line else "someone"
@@ -219,6 +261,18 @@ def build_user_message(state, *, cycle: int, log_lines: list,
                 open(inbox_path, "w", encoding="utf-8").close()
     except Exception:
         pass
+    
+    # At 21:00 mail check time, always remind about social options
+    if is_mail_time:
+        user_msg += "## 📬 家族收信时间 (21:00)\n"
+        user_msg += "你可以：bulletin_post(公告) | bulletin_read(读公告栏) | social_msg(私信家人) | social_lookup(查看家人农场)\n"
+        user_msg += "💡 记得——每一枚金币都是给祖父的。和家人商量分工，不要各自为战。\n"
+
+    # Periodic family nudge during daytime (every ~15 cycles)
+    if cycle % 15 == 0 and not is_mail_time and hour >= 6:
+        user_msg += "## 👨‍👩‍👦 别忘了你的家人\n"
+        user_msg += "铁娘子和老王也在为祖父的治疗费努力。如果你有富余的种子或金币，问问他们是否需要。\n"
+        user_msg += "如果你遇到了困难——说出来。家人之间不需要逞强。\n"
 
     try:
         all_profiles = agent_profile.list_agent_profiles(PARENT_VAULT)
@@ -228,8 +282,8 @@ def build_user_message(state, *, cycle: int, log_lines: list,
             for oid in others:
                 op = agent_profile.load_agent_profile(oid, PARENT_VAULT)
                 other_names.append(f"{op.display_name}({op.role})")
-            user_msg += f"## 👥 你认识的人\n{', '.join(other_names)}\n"
-            user_msg += "(你可以对他们发送 social_msg 或查看他们的农场 social_lookup)\n"
+            user_msg += f"## 👨‍👩‍👦 你的家人\n{', '.join(other_names)}\n"
+            user_msg += "(你们是一家人，共享这片祖父留下的土地。social_msg 私聊，social_lookup 查看他们的农场状态)\n"
     except Exception as _e:
         print(f"  [SOCIAL WARN] {str(_e)[:80]}".encode('ascii','replace').decode('ascii'))
 

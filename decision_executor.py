@@ -3,7 +3,6 @@ decision_executor.py — Action handler + fallback engine for Agent Farm
 =======================================================================
 Extracted from agent-world-llm.py. Handles all 40+ action types,
 parameter normalization, retry logic, and the fallback decision engine.
-
 The core function is `execute_action()` which takes a parsed decision
 dict and routes to the appropriate handler (server API, local memory,
 book engine, trade engine, etc.).
@@ -13,8 +12,6 @@ import vault_utils as vu
 import agent_profile
 import skill_tree
 import knowledge_map
-
-
 def execute_action(action: str, params: dict, state: dict, *,
                    cycle: int, _prof, _SKILL_TREE, VAULT: str,
                    PARENT_VAULT: str, FID: str, AID: str,
@@ -25,14 +22,12 @@ def execute_action(action: str, params: dict, state: dict, *,
                    mem_uses: dict, _same_day_cycles: int,
                    log_lines: list) -> dict:
     """Execute one agent action. Handles all action types.
-
     Returns:
         dict with keys: result_msg, ok, resp, lookup_result (updated),
                         thoughts, reasoning
     """
     result_msg = ""; ok = False; resp = {}
     lookup_result = ""
-
     for attempt in range(3):
         try:
             if action == "next_day":
@@ -94,16 +89,137 @@ def execute_action(action: str, params: dict, state: dict, *,
             elif action == "social_lookup":
                 target = params.get("target", "")
                 if target:
+                    lines_out = ["📋 " + target + "的农场:"]
+                    try:
+                        r = requests.get(f"{BASE_FARM}/api/farms", headers=HDRS, proxies=PROX, timeout=5)
+                        all_farms = r.json() if r.status_code == 200 else {}
+                        for fid, fdata in all_farms.items():
+                            aid = fdata.get("agent_id", "")
+                            tp = os.path.join(PARENT_VAULT, "agents", target, "state", "farm.md")
+                            if aid and os.path.exists(tp):
+                                r2 = requests.get(f"{BASE_FARM}/api/farm/{fid}", headers=HDRS, proxies=PROX, timeout=5)
+                                if r2.status_code == 200:
+                                    fs = r2.json()
+                                    lines_out.append("  💰 金币: " + str(fs.get("gold", "?")) + "G")
+                                    lines_out.append("  🌱 作物: " + str(len(fs.get("crops", []))) + "株")
+                                    lines_out.append("  📦 仓库: " + str(len(fs.get("storage", []))) + "/" + str(fs.get("storage_capacity", 50)))
+                                    storage = fs.get("storage", [])
+                                    if storage:
+                                        item_counts = {}
+                                        for s in storage:
+                                            name = s.get("crop_type", s.get("name", "?"))[:10]
+                                            item_counts[name] = item_counts.get(name, 0) + 1
+                                        storage_summary = ", ".join(k + "x" + str(v) for k, v in list(item_counts.items())[:5])
+                                        lines_out.append("  🏪 库存: " + storage_summary)
+                                    needs = []
+                                    if fs.get("gold", 2000) < 200:
+                                        needs.append("💰 缺钱")
+                                    if len(fs.get("storage", [])) == 0:
+                                        needs.append("🍞 缺食物")
+                                    if fs.get("tilled", 0) == 0 and fs.get("gold", 2000) < 100:
+                                        needs.append("🌱 缺种子")
+                                    if needs:
+                                        lines_out.append("  ⚠ 需求: " + ", ".join(needs))
+                                break
+                    except Exception:
+                        pass
                     target_state_path = os.path.join(PARENT_VAULT, "agents", target, "state", "farm.md")
                     if os.path.exists(target_state_path):
                         with open(target_state_path, "r", encoding="utf-8") as _sf:
-                            lookup_result = f"📋 {target}的农场:\n{_sf.read()[:1200]}"
-                        result_msg = f"Looked up {target}'s farm"
-                    else:
-                        lookup_result = f"📋 {target}: 没有找到该农夫的农场信息"
-                        result_msg = f"No farm data for {target}"
+                            lines_out.append(_sf.read()[:600])
+                    lookup_result = chr(10).join(lines_out)
+                    result_msg = "Looked up " + target + "'s farm"
                 else:
                     result_msg = "social_lookup needs target agent"
+                ok = True; resp = {"success": True, "message": result_msg}
+                break
+            elif action == "bulletin_post":
+                # Broadcast message to ALL other agents' inboxes
+                msg = params.get("message", "").strip()
+                if not msg:
+                    result_msg = "bulletin_post needs a message"
+                else:
+                    all_profiles = agent_profile.list_agent_profiles(PARENT_VAULT)
+                    recipients = [p for p in all_profiles if p != _AGENT_PROFILE_ID]
+                    sent_count = 0
+                    inbox_dir = os.path.join(PARENT_VAULT, "social")
+                    os.makedirs(inbox_dir, exist_ok=True)
+                    for rid in recipients:
+                        try:
+                            rprof = agent_profile.load_agent_profile(rid, PARENT_VAULT)
+                            inbox_path = os.path.join(inbox_dir, f"{rid}_inbox.md")
+                            entry = (f"\n### 📢 公告 from {_prof.display_name} — "
+                                     f"{state.get('season','?')} D{state.get('day',0)} Y{state.get('year',1)}\n"
+                                     f"<!-- sender_time: {state.get('season','?')}|{state.get('day',0)}|{state.get('year',1)}|{state.get('hour',0):.1f} -->\n"
+                                     f"{msg}\n")
+                            with open(inbox_path, "a", encoding="utf-8") as _bf:
+                                _bf.write(entry)
+                            sent_count += 1
+                        except Exception:
+                            pass
+                    result_msg = f"📢 公告已发送给{sent_count}人: {msg[:80]}"
+                ok = True; resp = {"success": True, "message": result_msg}
+                break
+            elif action == "bulletin_read":
+                # Read all recent bulletin posts from social directory
+                social_dir = os.path.join(PARENT_VAULT, "social")
+                all_posts = []
+                if os.path.isdir(social_dir):
+                    for fn in os.listdir(social_dir):
+                        if fn.endswith("_inbox.md"):
+                            try:
+                                with open(os.path.join(social_dir, fn), "r", encoding="utf-8") as _bf:
+                                    content = _bf.read()
+                                for line in content.split("\n"):
+                                    if "📢 公告" in line:
+                                        all_posts.append(line.strip())
+                            except Exception:
+                                pass
+                if all_posts:
+                    lookup_result = "## 📋 公告栏\n" + "\n".join(f"- {p}" for p in all_posts[-10:])
+                    result_msg = f"Read {len(all_posts)} bulletin posts"
+                else:
+                    lookup_result = "## 📋 公告栏\n(还没有人发公告)"
+                    result_msg = "Bulletin is empty"
+                ok = True; resp = {"success": True, "message": result_msg}
+                break
+            elif action == "send_gift":
+                target_name = params.get("target", "").strip()
+                item_type = params.get("item", params.get("item_type", "")).strip()
+                qty = int(params.get("qty", params.get("quantity", 1)))
+                if not target_name or not item_type:
+                    result_msg = "send_gift needs target and item"
+                else:
+                    # Resolve target to profile ID
+                    resolved = agent_profile.resolve_agent_name(PARENT_VAULT, target_name)
+                    inbox_dir = os.path.join(PARENT_VAULT, "social")
+                    os.makedirs(inbox_dir, exist_ok=True)
+                    gift_msg = f"🎁 {_prof.display_name}送来了 {item_type} ×{qty}"
+                    for inbox_name in [resolved, target_name]:
+                        ip = os.path.join(inbox_dir, f"{inbox_name}_inbox.md")
+                        with open(ip, "a", encoding="utf-8") as _gf:
+                            _gf.write(f"\n### {gift_msg}\n")
+                    result_msg = f"Sent gift to {target_name}: {item_type} ×{qty}"
+                ok = True; resp = {"success": True, "message": result_msg}
+                break
+            elif action == "send_gold":
+                target_name = params.get("target", "").strip()
+                amount = int(params.get("amount", 0))
+                if not target_name or amount <= 0:
+                    result_msg = "send_gold needs target and amount"
+                elif amount > state.get("gold", 0):
+                    result_msg = f"Not enough gold: need {amount}G, have {state['gold']}G"
+                else:
+                    resolved = agent_profile.resolve_agent_name(PARENT_VAULT, target_name)
+                    inbox_dir = os.path.join(PARENT_VAULT, "social")
+                    os.makedirs(inbox_dir, exist_ok=True)
+                    gold_msg = f"💰 {_prof.display_name}转来了 {amount}G"
+                    for inbox_name in [resolved, target_name]:
+                        ip = os.path.join(inbox_dir, f"{inbox_name}_inbox.md")
+                        with open(ip, "a", encoding="utf-8") as _gf:
+                            _gf.write(f"\n### {gold_msg}\n")
+                    state["gold"] -= amount
+                    result_msg = f"Sent {amount}G to {target_name}"
                 ok = True; resp = {"success": True, "message": result_msg}
                 break
             elif action == "read_book":
@@ -253,15 +369,11 @@ def execute_action(action: str, params: dict, state: dict, *,
                 ok = False
             else:
                 time.sleep(1)
-
     return {
         "result_msg": result_msg, "ok": ok, "resp": resp,
         "lookup_result": lookup_result, "action": action, "params": params,
     }
-
-
 # ═══════════════════════════ PARAM NORMALIZATION ═══════════════════════════
-
 def normalize_params(params: dict) -> dict:
     """Normalize LLM-invented parameter names to server-accepted keys."""
     if not params:
@@ -289,10 +401,7 @@ def normalize_params(params: dict) -> dict:
         if flat and not isinstance(flat[0], list):
             params["positions"] = [[flat[i], 0] for i in range(min(len(flat),9))]
     return params
-
-
 # ═══════════════════════════ FALLBACK ENGINE ═══════════════════════════
-
 def fallback_decision(state: dict, CROPS: dict) -> dict:
     """Rule-based fallback when LLM fails to respond. Returns {action, params, thoughts}."""
     action = "next_day"; params = {}
@@ -302,11 +411,9 @@ def fallback_decision(state: dict, CROPS: dict) -> dict:
     empty_tiles = state["tilled"] - state["planted"]
     hour = state.get("hour", 7.0)
     is_night = state.get("is_night", False)
-
     if is_night:
         action = "sleep"; params = {"hours": 8}
         return {"action": action, "params": params, "thoughts": "Night — sleep to morning"}
-
     # ── Daytime fallback logic ──
     if len(storage) > 2 and gold < 5000:
         action = "sell_storage"; thoughts = f"Sell ({len(storage)} items, G={gold})"
@@ -361,5 +468,4 @@ def fallback_decision(state: dict, CROPS: dict) -> dict:
         action = "buy"; params = {"item_type": "bread"}; thoughts = "Buy bread"
     if action == "next_day" and farmer.get("fatigue",0) >= 30:
         action = "sleep"; params = {"hours": 8}; thoughts = "Tired — sleep"
-
     return {"action": action, "params": params or {}, "thoughts": "Fallback"}

@@ -259,6 +259,41 @@ def list_agent_profiles(vault_root: str) -> List[str]:
     ]
 
 
+def resolve_agent_name(vault_root: str, name_or_id: str) -> str:
+    """Resolve an agent identifier to a profile ID. Accepts both display names
+    (e.g. '续仁武', '老王', '铁娘子') and raw IDs ('xu_renwu', etc.)."""
+    # Direct match against profile IDs
+    profiles = list_agent_profiles(vault_root)
+    if name_or_id in profiles:
+        return name_or_id
+    # Match against display names
+    for pid in profiles:
+        try:
+            prof = load_agent_profile(pid, vault_root)
+            if prof.display_name == name_or_id:
+                return pid
+            if name_or_id in prof.display_name or prof.display_name in name_or_id:
+                return pid
+        except Exception:
+            pass
+    # Fallback: return as-is (may or may not work)
+    return name_or_id
+
+
+def build_name_map(vault_root: str) -> dict:
+    """Build {display_name: profile_id, ...} for all known agents."""
+    profiles = list_agent_profiles(vault_root)
+    name_map = {}
+    for pid in profiles:
+        try:
+            prof = load_agent_profile(pid, vault_root)
+            name_map[prof.display_name] = pid
+            name_map[pid] = pid  # also map ID to itself
+        except Exception:
+            name_map[pid] = pid
+    return name_map
+
+
 # ═══════════════════════════ SELF-TEST ═══════════════════════════
 
 if __name__ == "__main__":
