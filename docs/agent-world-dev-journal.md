@@ -288,31 +288,95 @@ DeepSeek能理解"成熟作物=收获"的关联，能执行经济循环，能发
 
 ---
 
-## 十、最终状态（2026-06-20，14 commits 后）
+## 十、最终状态（2026-06-20，15 commits 后，Spring D1 清理）
 
 | 指标 | 值 |
 |------|-----|
-| 总提交数 | **100+** |
+| 总提交数 | **100+** (两天内 15+ commits) |
 | 核心代码行数 | agent_world_local.py 4,500+行 |
-| LLM Agent | agent-world-llm.py 665行（重构后）+ 3 模块 866 行 |
-| 独立模块 | 14 个 .py 模块 |
+| LLM Agent | agent-world-llm.py 665行（重构后）+ 3模块 866行 |
+| 独立模块 | 17个 .py 模块 |
+| JSON 配置 | 12个 (sensory, biomes, ecology, 3 skills, 13 books, 3 profiles) |
 | 物理子系统 | 20+ |
-| Agent 动作 | 65+ (含 bulletin_post/send_gold 等社交动作) |
-| Agent 数量 | 3 (农夫/畜牧者/工匠) |
-| 认知层数 | 6 (SenseCompiler→Schema→Interrupt→Profile→Social→Books) |
-| Agent 最佳战绩 | Y2+, 多次 harvest, emergent 社交协作 |
-| 社交动作成功 | 11 次 send_gold 在 agent 间流动 |
-| 生态交互 | 野兔毁作物→公告→凑钱建围栏 (完整 emergent 链) |
+| Agent 动作 | 65+ |
+| Agent 数量 | 3 (农夫 xu_renwu/畜牧者 old_wang/工匠 iron_lady) |
+| 认知层 | 6 (SenseCompiler→Schema→Interrupt→Profile→Social→Books) |
+| Biome 类型 | 6 (冲积平原/草原/森林/湿地/丘陵山地/河岸) |
+| 生态系统 | 13物种 × 6区域捕食网 |
+| 书籍 | 13本 (3本新手 + 10本通用) |
+| Agent 最佳战绩 | 多次 harvest, 1810+ cycles 稳定运行 |
+| 社交动作 | bulletin_post + social_msg + send_gold + send_gift |
+| 社交闭环 | 野兔毁作物→公告→凑钱建围栏 (完全 emergent) |
+| Vault 状态 | 清理完毕, Spring D1 就绪 |
+
+### 系统全貌
+
+**物理层 (agent_world_local.py, 4,500+ 行)**
+- 50×50 地图, 6 种真实地貌 (biomes.json)
+- 24h 连续时钟, 7 种天气 Markov 链
+- 14 种作物, GDD 积温生长
+- 土壤 NPK/pH/水分/表土
+- 5 种牲畜 + 孟德尔遗传
+- 5 级材料建造 + 5 种工具 × 5 级升级
+- 累进税/合同/贷款/食品保质期
+- 13 物种野生动物生态 (ecology.json + ecology_engine.py)
+
+**认知层 (agent-world-llm.py + 3 模块, 1,531 行)**
+- E4 SenseCompiler: 20 条确定性映射规则, 三级感知精度
+- E5 FarmEvent Schema v1.1: 57 种 event_type, 13 条重要性评分
+- E6 紧急中断: 12 个触发器 P0/P1/P2 (含 wolf_attack, crop_raided)
+
+**人格层 (W1, 3 模块)**
+- AgentProfile: 三层性格 (6 固定 + 11 习得 + 社会影响)
+- SkillTree: 3 职业分支树 (农夫 10/畜牧者 8/工匠 8 nodes)
+- KnowledgeMap: TileKnowledge + 传言/事实 + Trust
+
+**社交层 (W2, 6 动作)**
+- social_msg/lookup: 私聊 + 农场窥视
+- bulletin_post/read: 公告广播 + 阅读
+- send_gold/gift: 金币转账 + 礼物赠送
+- 三种收发: social_msg 私聊, bulletin_post 广播, send_gold 直接转账
+- 中文名→ID 映射, 收件箱双向匹配
+- Generative Agents 记忆注入 (消息读后自动 remember)
+- 时间戳带发送方游戏时间
+
+**文化层 (W3, 13 本书)**
+- 按技能树模式: 每书一个独立 JSON 文件
+- 6 类书籍: skill/science/philosophy/history/story/diary
+- 不对称起始: 每角色一个新手书
+- 阅读进度 + 识字门槛 + 夜间需要灯
+
+**世界层 (W4-W5, 4 模块)**
+- 6 种真实地貌 (biomes.json, procedural 生成)
+- 探索动作 + 三级距离感知 + KnowledgeMap 集成
+- 12 个传言模板, 4 种来源, 探索验证
+- 13 物种食物链, 狼攻击二元区分 (饥饿 vs 机会)
+- Agent 间交易系统: trade_propose/accept/counter/reject
+- Trust 衰减公式: effective_trust = trust + min(0.2, 0.01 × months)
+
+### 不对称起始
+
+| Agent | 角色 | 起始书 | 起始工具 | intelligence | social_aptitude |
+|-------|------|--------|---------|-------------|-----------------|
+| xu_renwu | farmer | 种植基础 | copper_water_can + copper_hoe | 0.75 | 0.4 |
+| old_wang | herder | 畜牧基础 | herding_staff + fodder_bag | 0.5 | 0.3 |
+| iron_lady | craftsman | 锻造入门 | hammer_copper + anvil_portable | 0.7 | 0.35 |
 
 ### 经验总结
 
-**涌现设计优于硬编码。** Agent 看到狼群警告后自发发明了 bulletin_post 动作。我们只需给它工具，它自己找用法。
+**涌现设计优于硬编码。** Agent 自发发明 bulletin_post、野兔毁作物→公告凑钱建围栏。
 
-**先做单Agent再做多Agent。** W1的人格化是多Agent的前提——没有独特的性格就是复制品。
+**先做单Agent再做多Agent。** W1 的人格化是多Agent的前提——没有独特性格就是复制品。
 
-**重构不吓人。** 1891行单文件拆成4模块，引入3个bug全修完。更易维护。
+**重构不吓人。** 1891行单体拆成4模块, 引入3个bug全部修完。
 
-**生态驱动社交。** 最活跃的社交不是我们设计的——是野兔毁了作物后 agent 自发组织防御。系统给条件，emergence 自己发生。
+**生态驱动社交。** 最活跃的社交是野兔毁了作物后 agent 自发组织防御。
+
+**不对称创造需求。** 三人从第一天就需要彼此——不交易就活不下去。
+
+**文件即数据库。** 每本书=一个JSON, 每技能树=一个JSON, 每Profile=一个JSON。不加依赖。
+
+**确定性编译层是LLM可靠性的保障。** SenseCompiler 确保相同物理状态→相同描述。Constraint Architecture 的"LLM建议, 代码决定"在每一层都得到验证。
 | 动作种类 | 60+ |
 | Agent最佳战绩 | 8,942G, 150次收获, Y2 Winter D7 |
 | 记忆首次调用 | 3次recall @ v11 |
