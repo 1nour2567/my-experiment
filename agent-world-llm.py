@@ -270,12 +270,14 @@ def _inject_past_season_report(state):
 
 def _day_path(year, season, day):
     """Get the vault path for a given day's decision log."""
-    return f"decisions/Y{year}/{season}/day{day:02d}.md"
+    # Sanitize: Windows doesn't allow ? * : " < > | in paths
+    safe_season = season.replace("?", "Unknown").replace("*", "_").replace(":", "_")
+    return f"decisions/Y{year}/{safe_season}/day{day:02d}.md"
 
 def _write_vault_llm(cycle, state, action, result_msg, ok, thoughts, lesson):
     """Write agent decisions and state to the Obsidian vault."""
     today = datetime.date.today().isoformat()
-    s = state.get("season","?"); d = state.get("day",0); y = state.get("year",1)
+    s = state.get("season","Spring"); d = state.get("day",1); y = state.get("year",1)
     entry =  f"- **{today} C{cycle+1} {s}D{d} Y{y}**: `{action}`\n"
     entry += f"- 体力={state['energy']} | 金币={state['gold']}\n"
     entry += f"- 想法: {thoughts[:200]}\n"
@@ -309,9 +311,17 @@ _AGENT_SKILL_SUMMARY = _SKILL_TREE.get_skill_summary(
 _BOOK_ENGINE = book_engine.BookEngine(PARENT_VAULT)
 _BOOK_LIBRARY = _BOOK_ENGINE.get_library(_prof.id)
 if not _BOOK_LIBRARY:
-    _BOOK_ENGINE.add_book_to_library(_prof.id, "wheat_guide", cycle=0)
+    # Asymmetric start: each role gets their own starter book
+    _ROLE_STARTER_BOOKS = {
+        "farmer": "planting_basics",
+        "herder": "herding_basics",
+        "craftsman": "forging_basics",
+    }
+    starter_id = _ROLE_STARTER_BOOKS.get(_prof.role, "planting_basics")
+    _BOOK_ENGINE.add_book_to_library(_prof.id, starter_id, cycle=0)
     _BOOK_LIBRARY = _BOOK_ENGINE.get_library(_prof.id)
-    print(f"  Starter book: wheat_guide added to library")
+    print(f"  Starter book: {starter_id} added to library")
+    print(f"  Starting tools: {', '.join(_prof.inventory.get('tools_owned', [])) or 'none'}")
 _RUMOR_ENGINE = rumor_engine.RumorEngine()
 _TRADE_ENGINE = trade_engine.TradeEngine(PARENT_VAULT)
 

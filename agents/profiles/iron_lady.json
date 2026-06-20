@@ -50,7 +50,7 @@
 
   "inventory": {
     "owned_books": [],
-    "tools_owned": ["hammer_iron", "anvil_portable"],
+    "tools_owned": ["hammer_copper", "anvil_portable"],
     "personal_items": ["lucky_charm", "forge_apron"]
   },
 

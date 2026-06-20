@@ -1,0 +1,16 @@
+{
+  "id": "herding_basics",
+  "title": "畜牧基础",
+  "author": "祖父的笔记",
+  "category": "skill",
+  "chapters": 3,
+  "description": "羊需要每天喂食。草原上的牧草比农场里的饲料好——羊在草原上长得快。每三天可以剪一次羊毛，卖给市场。冬天草原休眠，提前存够草料。",
+  "rarity": "common",
+  "buy_price": 30,
+  "effects": {
+    "skill_xp": {"husbandry": 30},
+    "unlocks_fact": null,
+    "preference_shift": null,
+    "fatigue_recovery": 0
+  }
+}

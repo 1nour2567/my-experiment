@@ -193,6 +193,11 @@ class AgentProfile:
         else:
             lines.append("- 决策风格: 平衡型")
 
+        # Starting equipment (asymmetric start)
+        tools = self.inventory.get("tools_owned", [])
+        if tools:
+            lines.append(f"- 随身工具: {', '.join(tools)}")
+
         return "\n".join(lines)
 
     # ═══════════════════════ SKILL HELPERS ═══════════════════════

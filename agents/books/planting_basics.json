@@ -1,0 +1,16 @@
+{
+  "id": "planting_basics",
+  "title": "种植基础",
+  "author": "祖父的笔记",
+  "category": "skill",
+  "chapters": 3,
+  "description": "种子种下去需要每天浇水。成熟了要立刻收获。最简单的经济循环：buy→till→plant→water→harvest→sell_storage。先试试防风草——便宜（20G），长得快（24GDD），春天就能收。",
+  "rarity": "common",
+  "buy_price": 30,
+  "effects": {
+    "skill_xp": {"farming": 30},
+    "unlocks_fact": null,
+    "preference_shift": null,
+    "fatigue_recovery": 0
+  }
+}

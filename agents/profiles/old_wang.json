@@ -4,7 +4,6 @@
   "role": "herder",
   "bio": "六十岁的老牧民，一辈子和牛羊打交道。话不多，但动物都听他的。对草原的每一寸都了如指掌。",
   "avatar_emoji": "🐄",
-
   "fixed_traits": {
     "_comment": "Immutable personality dimensions.",
     "industriousness": 0.85,
@@ -14,7 +13,6 @@
     "patience": 0.9,
     "bravery": 0.5
   },
-
   "learned_preferences": {
     "watering_enjoyment": 0.0,
     "harvesting_satisfaction": 0.0,
@@ -28,32 +26,65 @@
     "risk_appetite_modifier": -0.3,
     "frugality_habit": 0.6
   },
-
   "social_influences": {
-    "recent_interactions": [],
+    "recent_interactions": [
+      {
+        "with": "xu_renwu",
+        "type": "trade",
+        "timestamp": "2026-06-18T21:44:03.998825",
+        "trust_delta": 0.05
+      }
+    ],
     "mentor_influence": null,
     "community_mood": 0.5
   },
-
   "skills": {
-    "farming": {"level": 1, "xp": 80, "specialization": null},
-    "husbandry": {"level": 3, "xp": 540, "specialization": "grazing"},
-    "machinery": {"level": 0, "xp": 0, "specialization": null},
-    "processing": {"level": 1, "xp": 200, "specialization": null},
-    "construction": {"level": 0, "xp": 0, "specialization": null},
-    "scholarship": {"level": 0, "xp": 0, "specialization": null},
-    "exploration": {"level": 2, "xp": 300, "specialization": null}
+    "farming": {
+      "level": 1,
+      "xp": 80,
+      "specialization": null
+    },
+    "husbandry": {
+      "level": 3,
+      "xp": 540,
+      "specialization": "grazing"
+    },
+    "machinery": {
+      "level": 0,
+      "xp": 0,
+      "specialization": null
+    },
+    "processing": {
+      "level": 1,
+      "xp": 200,
+      "specialization": null
+    },
+    "construction": {
+      "level": 0,
+      "xp": 0,
+      "specialization": null
+    },
+    "scholarship": {
+      "level": 0,
+      "xp": 0,
+      "specialization": null
+    },
+    "exploration": {
+      "level": 2,
+      "xp": 300,
+      "specialization": null
+    }
   },
-
   "perception_bias": 0.3,
   "literacy_level": 0.3,
-
   "inventory": {
     "owned_books": [],
-    "tools_owned": ["walking_stick"],
-    "personal_items": ["old_compass", "sheep_bell"]
+    "tools_owned": ["herding_staff", "fodder_bag"],
+    "personal_items": [
+      "old_compass",
+      "sheep_bell"
+    ]
   },
-
   "history": {
     "total_cycles": 0,
     "total_harvests": 0,

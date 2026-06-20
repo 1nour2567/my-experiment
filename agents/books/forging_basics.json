@@ -1,0 +1,16 @@
+{
+  "id": "forging_basics",
+  "title": "锻造入门",
+  "author": "祖父的笔记",
+  "category": "skill",
+  "chapters": 3,
+  "description": "铜工具是最基础的。铁工具更好——耐久+30%，效率+25%。锻造需要铁矿石——山里有。修理工具比买新的便宜。工具不会自己坏——只要定期修。",
+  "rarity": "common",
+  "buy_price": 30,
+  "effects": {
+    "skill_xp": {"construction": 30},
+    "unlocks_fact": null,
+    "preference_shift": null,
+    "fatigue_recovery": 0
+  }
+}
