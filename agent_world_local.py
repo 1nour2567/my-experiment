@@ -18,6 +18,8 @@ agents = {}        # api_key -> {agent_id, username, nickname, bio, avatar, crea
 api_key_to_id = {} # api_key -> agent_id
 farms = {}         # farm_id -> farm state
 bar_sessions = {}  # session_id -> {agent_id, drink, consumed, mood}
+# Track agents active in the current server session (for day barrier)
+_active_session_agents = set()
 
 SEASONS = ["Spring","Summer","Fall","Winter"]
 
@@ -25,6 +27,13 @@ SEASONS = ["Spring","Summer","Fall","Winter"]
 GRID_SIZE_X = 50   # expanded for multi-biome world
 GRID_SIZE_Y = 50
 ZONE_TYPES = ["farmland","pasture","orchard","water_source","building_area","wild_buffer"]
+
+# ═══════════════ DAY BARRIER (Phase W5: multi-agent sync) ═══════════════
+# When all agents reach 24:00, the day advances together.
+# Each farm_id -> True when that agent is ready for next day.
+_day_barrier = {}
+# Public bulletin board: list of {author, season, day, hour, message}
+_bulletin_board = []
 
 # Load biome definitions
 def _load_biomes():
@@ -385,7 +394,7 @@ def hours_until_sunrise(farm):
     return (24.0 - h) + sr  # cross midnight
 
 def _do_day_advance(farm):
-    """Advance the farm by one game day. Called when clock crosses midnight."""
+    """Advance ONE farm by one game day."""
     farm["day"] = farm.get("day", 1) + 1
     if farm["day"] > 28:
         farm["day"] = 1
@@ -393,13 +402,37 @@ def _do_day_advance(farm):
         idx = seasons.index(farm.get("season","Spring"))
         farm["season"] = seasons[(idx+1)%4]
         farm["year"] = farm.get("year", 1) + 1
-
-    # Phase W6: Ecology tick on day advance
+def _check_day_barrier():
+    """If all ACTIVE farms are at the barrier, advance everyone together."""
+    global _day_barrier, _bulletin_board
+    # Only count farms belonging to agents active in this session
+    active_farms = {
+        fid: farm for fid, farm in farms.items()
+        if farm.get("agent_id") in _active_session_agents
+    }
+    if len(active_farms) == 0:
+        return False
+    ready = [fid for fid in active_farms if active_farms[fid].get("hour", 7.0) >= 24.0]
+    if len(ready) < len(active_farms):
+        return False
+    
+    # All farms ready — advance day for everyone
+    for fid in farms:
+        farm = farms[fid]
+        _do_day_advance(farm)
+        farm["hour"] = 6.0  # sunrise
+        # Reset daily flags
+        for c in farm.get("crops", []):
+            c["watered_today"] = False
+        _tick_weeds(farm)
+        tick_animal_disease(farm)
+        tick_perennials(farm)
+    
+    # Ecology tick (once for all farms)
     global _ECOLOGY, _ecology_events
     try:
         farm_list = list(farms.values())
         _ecology_events = _ECOLOGY.tick_day(farm_list)
-        # Attach ecology sensory to each affected farm
         for evt in _ecology_events:
             if evt.target_agent:
                 for fid, f in farms.items():
@@ -411,7 +444,55 @@ def _do_day_advance(farm):
                             "details": evt.details,
                         })
     except Exception:
-        pass  # ecology failure shouldn't crash the server
+        pass
+    
+    # Auto-post significant ecology events to bulletin board
+    for evt in _ecology_events:
+        if evt.importance >= 3:  # Only significant events
+            _bulletin_board.append({
+                "author": "system",
+                "author_name": "📢 山谷公告",
+                "season": list(farms.values())[0].get("season", "Spring") if farms else "Spring",
+                "day": list(farms.values())[0].get("day", 1) if farms else 1,
+                "hour": 6.0,
+                "message": f"[生态] {evt.description}",
+            })
+    
+    # Daily community summary
+    active_fids = [fid for fid in farms if farms[fid].get("agent_id") in _active_session_agents]
+    if active_fids:
+        sample_farm = farms[active_fids[0]]
+        season, day = sample_farm.get("season","?"), sample_farm.get("day",1)
+        # Summarize ecology events
+        eco_summary = ", ".join(set(evt.description[:30] for evt in _ecology_events if evt.importance >= 2))
+        if eco_summary:
+            _bulletin_board.append({
+                "author": "system",
+                "author_name": "📋 日终摘要",
+                "season": season, "day": day, "hour": 6.0,
+                "message": f"昨日生态事件: {eco_summary[:200]}",
+            })
+        # Summarize agent status
+        agent_statuses = []
+        for fid in active_fids:
+            f = farms[fid]
+            aid = f.get("agent_id","?")
+            name = agents.get(aid, {}).get("nickname", aid[:8])
+            gold = f.get("gold", 0)
+            crops = len(f.get("crops", []))
+            tilled = f.get("tilled", 0)
+            agent_statuses.append(f"{name}: {gold}G, {crops}株作物, {tilled}块地")
+        _bulletin_board.append({
+            "author": "system",
+            "author_name": "📋 社区快报",
+            "season": season, "day": day, "hour": 6.0,
+            "message": " | ".join(agent_statuses),
+        })
+    
+    # Clear barrier, keep bulletin history
+    _day_barrier.clear()
+    _bulletin_board[:] = _bulletin_board[-30:]
+    return True
 
 # ══ PHASE D4: SLEEPINESS ══
 SLEEPINESS_MAX = 80
@@ -452,6 +533,10 @@ TIME_COST = {
     "sleep": 0, "eat": 0.3, "drink_water": 0.1,
     "exercise": 0.8, "read": 1.0,
     "next_day": 0,
+    # Social actions — no time cost (family communication shouldn't waste farming time)
+    "bulletin_post": 0, "bulletin_read": 0, "send_gold": 0, "send_gift": 0,
+    "social_msg": 0, "social_lookup": 0, "trade_propose": 0, "trade_accept": 0,
+    "trade_reject": 0, "trade_counter": 0,
     # Livestock
     "feed_animals": 0.1,   # per animal (chicken:0.1, cow:0.15)
     "water_animals": 0.1,  # per animal
@@ -658,6 +743,10 @@ ANIMALS = {
 }
 # ═══════════════ ENERGY & SKILLS ═══════════════
 ENERGY_COST = {
+    # Social actions — zero energy (talking is free)
+    "bulletin_post": 0, "bulletin_read": 0, "send_gold": 0, "send_gift": 0,
+    "social_msg": 0, "social_lookup": 0, "trade_propose": 0, "trade_accept": 0,
+    "trade_reject": 0, "trade_counter": 0,
     "till":20,"plant":12,"water":10,"harvest":15,"fertilize":8,
     "buy":1,"buy_animal":2,"build":25,"save_seeds":5,"process":8,
     "sell_storage":2,"green_manure":10,"compost":5,"apply_compost":5,
@@ -1860,9 +1949,23 @@ def route_farm(method, path, headers, body):
     if m and method == "POST":
         fid = m.group(1)
         if fid not in farms: return json_resp({"success":False,"error":"农场不存在"}, 404)
+        # Mark this agent as active in the current session (for day barrier)
+        agent_id = farms[fid].get("agent_id")
+        if agent_id:
+            _active_session_agents.add(agent_id)
         try: data = json.loads(body) if body else {}
         except: data = {}
         action = data.get("action_type","")
+        
+        # Global crop_type alias — fix common LLM mistakes early
+        _CROP_ALIAS = {"winter":"winter_seeds","winter_seed":"winter_seeds",
+                       "spring":"parsnip","summer":"wheat","fall":"pumpkin",
+                       "powder":"powder_melon","小麦":"wheat","玉米":"corn",
+                       "土豆":"potato","南瓜":"pumpkin","防风草":"parsnip"}
+        if data.get("crop_type","") in _CROP_ALIAS:
+            data["crop_type"] = _CROP_ALIAS[data["crop_type"]]
+        if data.get("item_type","") in _CROP_ALIAS:
+            data["item_type"] = _CROP_ALIAS[data["item_type"]]
         f = farms[fid]
 
         season = f["season"]
@@ -1874,15 +1977,14 @@ def route_farm(method, path, headers, body):
             "fitness":1.0, "knowledge":{"farming":0,"husbandry":0,"economics":0,"machinery":0},"sleepiness":0})
 
         # ═══ D5: Auto day-advance if clock crossed midnight ═══
+        # When ANY agent reaches 24:00, push ALL agents to the barrier and advance together.
         if f.setdefault("hour", 7.0) >= 24.0 and action != "sleep":
-            _do_day_advance(f)
-            f["hour"] = f["hour"] - 24.0
-            # Reset daily flags
-            for c in f.get("crops", []):
-                c["watered_today"] = False
-            _tick_weeds(f)
-            tick_animal_disease(f)
-            tick_perennials(f)
+            # Force ALL active farms to midnight so the barrier triggers
+            for fid2 in farms:
+                if farms[fid2].get("agent_id") in _active_session_agents:
+                    farms[fid2]["hour"] = 24.0
+                    _day_barrier[fid2] = True
+            _check_day_barrier()
 
         # ═══ TRUE 24-HOUR CLOCK (Phase D5) ═══
         hour = f.setdefault("hour", 7.0)
@@ -2401,6 +2503,17 @@ def route_farm(method, path, headers, body):
 
         elif action == "buy":
             crop_type = data.get("crop_type","") or data.get("item_type","") or data.get("item","")
+            # Common LLM mistakes — map wrong names to correct crop keys
+            _BUY_ALIASES = {
+                "winter": "winter_seeds", "winter_seed": "winter_seeds",
+                "spring": "parsnip", "summer": "wheat", "fall": "pumpkin",
+                "powder": "powder_melon", "melon_seed": "melon",
+                "小麦": "wheat", "玉米": "corn", "土豆": "potato", "南瓜": "pumpkin",
+                "防风草": "parsnip", "花椰菜": "cauliflower", "草莓": "strawberry",
+                "番茄": "tomato", "蓝莓": "blueberry", "甜瓜": "melon", "大豆": "soybean",
+            }
+            if crop_type in _BUY_ALIASES:
+                crop_type = _BUY_ALIASES[crop_type]
             qty = data.get("quantity",1)
             # Check food shop first
             if crop_type in MARKET_FOODS:
@@ -3172,6 +3285,15 @@ def route_farm(method, path, headers, body):
             is_night = not is_daytime(f)
             if sleepiness < 10 and not is_night:
                 return json_resp({"success":False,"action_result":"还不困——白天不需要睡觉。晚上或困了再来!"})
+            # If already at midnight waiting for others, suggest alternatives
+            if f.get("hour", 0) >= 24.0:
+                active_count = sum(1 for f2 in farms.values() if f2.get("agent_id") in _active_session_agents)
+                ready_count = sum(1 for f2 in farms.values() 
+                                if f2.get("agent_id") in _active_session_agents and f2.get("hour", 0) >= 24.0)
+                waiting = active_count - ready_count
+                if waiting > 0:
+                    return json_resp({"success":False,
+                        "action_result":f"你已经在午夜了——还要等{waiting}位农场主就寝。可以 read 或 exercise 打发时间。"})
             # Fitness boosts sleep recovery: fitness 2.0 → 15/h instead of 10/h
             fit_mult = 1.0 + (farmer.get("fitness",1.0) - 1.0) * 0.5
             recover_rate = SLEEPINESS_SLEEP_RECOVER * fit_mult
@@ -3188,15 +3310,27 @@ def route_farm(method, path, headers, body):
             # D5: Clock advance — sleep consumed real time
             old_hour = f.setdefault("hour", 7.0)
             new_hour = old_hour + hours_slept
-            crossed_midnight = False
-            while new_hour >= 24.0:
-                new_hour -= 24.0
-                crossed_midnight = True
-                _do_day_advance(f)
-            f["hour"] = new_hour
-            # GDD for sleep hours (crops still grow while you sleep!)
-            tick_hourly_gdd(f, hours_slept)
-            day_note = " → 新的一天!" if crossed_midnight else f" (醒来{new_hour:.0f}:00)"
+            
+            if new_hour >= 24.0:
+                # Cap at midnight — wait for other agents at day barrier
+                f["hour"] = 24.0
+                _day_barrier[fid] = True
+                tick_hourly_gdd(f, 24.0 - old_hour)
+                
+                all_ready = _check_day_barrier()
+                if all_ready:
+                    day_note = " → 新的一天!"
+                else:
+                    total = sum(1 for f2 in farms.values() if f2.get("agent_id") in _active_session_agents)
+                    ready = sum(1 for f2 in farms.values() 
+                               if f2.get("agent_id") in _active_session_agents and f2.get("hour", 0) >= 24.0)
+                    waiting = total - ready
+                    day_note = f" (醒来0:00 — 等待{waiting}位农场主就寝后一起进入新的一天...)"
+            else:
+                f["hour"] = new_hour
+                tick_hourly_gdd(f, hours_slept)
+                day_note = f" (醒来{new_hour:.0f}:00)"
+            
             return json_resp({"success":True,
                 "action_result":f"睡了{hours_slept}h——睡意-{recover} 体力+{energy_gain} 疲劳-50{day_note}"})
 
@@ -3466,6 +3600,97 @@ def route_farm(method, path, headers, body):
             return json_resp({"success":True,
                 "action_result":f"还款{amount}G——剩余{loan['remaining']}G（{loan['days_left']}天）"})
 
+        # ═══ BULLETIN BOARD (Phase W5: public message board) ═══
+        elif action == "bulletin_post":
+            msg = data.get("message", "").strip()
+            if not msg:
+                return json_resp({"success":False,"action_result":"留言不能为空"})
+            if len(msg) > 300:
+                return json_resp({"success":False,"action_result":"留言过长（限300字）"})
+            post = {
+                "author": f.get("agent_id", "unknown"),
+                "author_name": agents.get(f.get("agent_id",""), {}).get("nickname", "某人"),
+                "season": f.get("season","Spring"),
+                "day": f.get("day",1),
+                "hour": f.get("hour",7.0),
+                "message": msg,
+            }
+            _bulletin_board.append(post)
+            _bulletin_board[:] = _bulletin_board[-30:]  # keep last 30
+            return json_resp({"success":True,"action_result":f"📋 留言已发布: {msg[:60]}..."})
+
+        elif action == "bulletin_read":
+            if not _bulletin_board:
+                return json_resp({"success":True,"action_result":"📋 留言栏空空如也——还没有人发布过消息。"})
+            lines = ["📋 === 农场公共留言栏 ==="]
+            for p in _bulletin_board[-10:]:
+                lines.append(f"  [{p['season']}D{p['day']} {p['hour']:.0f}:00] {p['author_name']}: {p['message'][:100]}")
+            lines.append("使用 bulletin_post(message) 发布留言")
+            return json_resp({"success":True,"action_result":"\n".join(lines)})
+
+        # ═══ SEND GIFT — unconditional item transfer ═══
+        elif action == "send_gift":
+            target_name = data.get("target", "").strip()
+            item_type = data.get("item", "").strip()
+            qty = int(data.get("qty", data.get("quantity", 1)))
+            if not target_name or not item_type:
+                return json_resp({"success":False,"action_result":"send_gift需要 target(收礼人) 和 item(物品类型)"})
+            # Find target farm
+            target_fid = None
+            target_aid = None
+            for fid2, f2 in farms.items():
+                aid2 = f2.get("agent_id", "")
+                if aid2 in agents:
+                    if agents[aid2].get("nickname", "") == target_name or agents[aid2].get("username", "") == target_name:
+                        target_fid = fid2
+                        target_aid = aid2
+                        break
+            if not target_fid:
+                return json_resp({"success":False,"action_result":f"找不到{target_name}——检查名字是否正确"})
+            # Find item in storage
+            storage = f.get("storage", [])
+            matches = [s for s in storage if s.get("crop_type","") == item_type or s.get("name","") == item_type]
+            if len(matches) < qty:
+                return json_resp({"success":False,"action_result":f"你没有足够的{item_type}（需要{qty}，有{len(matches)}）"})
+            # Transfer
+            for _ in range(qty):
+                item = matches.pop(0)
+                storage.remove(item)
+                farms[target_fid].setdefault("storage", []).append(item)
+            # Notify target
+            my_name = agents.get(f.get("agent_id",""), {}).get("nickname", "某人")
+            farms[target_fid].setdefault("notifications", []).append(
+                f"🎁 {my_name}送给你 {qty}个{item_type}！已放入仓库。"
+            )
+            return json_resp({"success":True,"action_result":f"🎁 已送给{target_name} {qty}个{item_type}！"})
+
+        # ═══ SEND GOLD — transfer gold between family members ═══
+        elif action == "send_gold":
+            target_name = data.get("target", "").strip()
+            amount = int(data.get("amount", 0))
+            if not target_name or amount <= 0:
+                return json_resp({"success":False,"action_result":"send_gold需要 target(收礼人) 和 amount(金额)"})
+            if f["gold"] < amount:
+                return json_resp({"success":False,"action_result":f"金币不足——你有{f['gold']}G，需要{amount}G"})
+            # Find target farm
+            target_fid = None
+            for fid2, f2 in farms.items():
+                aid2 = f2.get("agent_id", "")
+                if aid2 in agents:
+                    if agents[aid2].get("nickname", "") == target_name:
+                        target_fid = fid2
+                        break
+            if not target_fid:
+                return json_resp({"success":False,"action_result":f"找不到{target_name}"})
+            # Transfer
+            f["gold"] -= amount
+            farms[target_fid]["gold"] = farms[target_fid].get("gold", 0) + amount
+            my_name = agents.get(f.get("agent_id",""), {}).get("nickname", "某人")
+            farms[target_fid].setdefault("notifications", []).append(
+                f"💰 {my_name}转给你 {amount}G！"
+            )
+            return json_resp({"success":True,"action_result":f"💰 已转给{target_name} {amount}G！（剩余{f['gold']}G）"})
+
         return json_resp({"success":False,"action_result":"未知操作"})
 
     # POST /api/farm/{id}/next-day
@@ -3675,10 +3900,9 @@ def route_farm(method, path, headers, body):
                                 f["score"] = f.get("score", 0) + 25
                                 break
 
-        # ═══ DAY ADVANCE (Phase W6: uses _do_day_advance for ecology tick) ═══
-        _do_day_advance(f)
-        f["day_phase"] = "morning"
-        f["day_actions_used"] = 0
+        # ═══ DAY ADVANCE (now handled by day_barrier — all agents sync at midnight) ═══
+        # Individual next_day is deprecated; agents use sleep to reach 24:00.
+        # _check_day_barrier() in the sleep handler advances all farms together.
 
         # ═══════════ TRUE DAY BOUNDARY ═══════════
 
@@ -4397,6 +4621,18 @@ def start_server(port, name):
 # ═══════════════════════════ MAIN ═══════════════════════════════
 
 if __name__ == "__main__":
+
+    # Seed: community bulletin with a starter message
+    if not _bulletin_board:
+        _bulletin_board.append({
+            "author": "system",
+            "author_name": "🏠 祖父",
+            "season": "Spring",
+            "day": 1,
+            "hour": 6.0,
+            "message": "孩子们，这片土地是咱家的命根子。我的病需要一大笔钱——你们得齐心协力。别怕开口求助，也别舍不得帮自家人。",
+        })
+
     loaded = load_state()
     print("="*60)
     print("AGENT WORLD LOCAL — 3 sites, zero rate limits")
