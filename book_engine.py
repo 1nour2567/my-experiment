@@ -39,61 +39,95 @@ class BookOwned:
 # ═══════════════════════════ BOOK ENGINE ═══════════════════════════
 
 class BookEngine:
-    """Manages book catalog, agent libraries, reading, and writing."""
+    """Manages book catalog, agent libraries, reading, and writing.
+
+    Books are stored as individual JSON files in agents/books/ (like skills).
+    Each file = one book. Add/remove books by adding/removing files.
+    """
+
+    # Reading mechanics (constant — not per-book)
+    READING_MECHANICS = {
+        "chapters_per_book": {"min": 2, "max": 5},
+        "minutes_per_chapter": 30,
+        "chapters_per_read_action": 1,
+        "literacy_requirement": {
+            "skill": 0.2, "science": 0.4, "philosophy": 0.6,
+            "history": 0.4, "story": 0.1, "diary": 0.0,
+        },
+        "lighting_requirement": "daytime OR lamp_owned",
+    }
+
+    CATEGORIES = {
+        "skill": {"icon": "📘", "desc": "技能书 — 提供技能经验，解锁技能树节点"},
+        "science": {"icon": "🔬", "desc": "科普书 — 解锁世界观知识，发现事实"},
+        "philosophy": {"icon": "📜", "desc": "哲学书 — 改变性格权重，引发偏好漂移"},
+        "history": {"icon": "📚", "desc": "历史书 — 注入跨年记忆，如同亲身经历"},
+        "story": {"icon": "📖", "desc": "故事书 — 随机微调偏好，提供娱乐降低疲劳"},
+        "diary": {"icon": "📝", "desc": "日记 — agent 自己写或他人的记录，深度了解"},
+    }
 
     def __init__(self, parent_vault: str):
         self.parent_vault = parent_vault
-        self.catalog = self._load_catalog()
+        self._books_dir = os.path.join(parent_vault, "agents", "books")
+        self._books: dict = {}  # {book_id: book_def}
+        self._load_books()
 
-    def _load_catalog(self) -> dict:
-        """Load the master book catalog."""
-        path = os.path.join(self.parent_vault, "agents", "books", "_catalog.json")
-        if not os.path.exists(path):
-            return {"books": [], "reading_mechanics": {}, "categories": {}}
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
+    def _load_books(self):
+        """Load all individual book JSON files from agents/books/."""
+        self._books.clear()
+        if not os.path.isdir(self._books_dir):
+            return
+        for fn in sorted(os.listdir(self._books_dir)):
+            if not fn.endswith(".json"):
+                continue
+            path = os.path.join(self._books_dir, fn)
+            try:
+                with open(path, "r", encoding="utf-8-sig") as f:
+                    book = json.load(f)
+                if "id" in book:
+                    self._books[book["id"]] = book
+            except Exception:
+                pass
 
     def get_book_def(self, book_id: str) -> Optional[dict]:
-        """Get a book's definition from the master catalog."""
-        for book in self.catalog.get("books", []):
-            if book["id"] == book_id:
-                return dict(book)
+        """Get a book's definition. Loads from disk (supports hot-add)."""
+        # Check memory first
+        if book_id in self._books:
+            return dict(self._books[book_id])
+        # Try loading from disk (hot-add support — like adding skill files)
+        path = os.path.join(self._books_dir, f"{book_id}.json")
+        if os.path.exists(path):
+            with open(path, "r", encoding="utf-8-sig") as f:
+                book = json.load(f)
+            self._books[book_id] = book
+            return dict(book)
         return None
 
     def list_available_books(self, rarity_filter: Optional[str] = None) -> List[dict]:
         """List all books in the catalog, optionally filtered by rarity."""
-        books = self.catalog.get("books", [])
+        books = list(self._books.values())
         if rarity_filter:
             books = [b for b in books if b.get("rarity") == rarity_filter]
         return books
 
     def get_shop_books(self, season: str, agent_role: str) -> List[dict]:
-        """Generate a shop book list appropriate for the given season and agent role.
-        Common books always available; rarer ones appear randomly."""
+        """Generate a shop book list appropriate for the given season and agent role."""
         import random
-        available = []
-
-        # Always show common skill books relevant to role
-        common = [b for b in self.catalog.get("books", []) if b.get("rarity") == "common"]
-        available.extend(common)
-
-        # Role-relevant uncommon books (70% chance each)
+        all_books = list(self._books.values())
+        # Note: the `season` parameter is here for future seasonal book rotations.
+        # Currently books are available year-round.
+        available = [b for b in all_books if b.get("rarity") == "common"]
         role_books = {
             "farmer": ["soil_science", "water_wisdom", "great_drought"],
             "herder": ["pasture_economics", "herbal_medicine", "great_drought"],
             "craftsman": ["forge_mastery", "water_wisdom", "soil_science"],
         }
         for bid in role_books.get(agent_role, []):
-            if random.random() < 0.7:
-                book = self.get_book_def(bid)
-                if book:
-                    available.append(book)
-
-        # Rare books (15% chance each)
-        for book in self.catalog.get("books", []):
-            if book.get("rarity") == "rare" and random.random() < 0.15:
-                available.append(dict(book))
-
+            book = self.get_book_def(bid)
+            if book: available.append(book)
+        for b in all_books:
+            if b.get("rarity") == "rare" and random.random() < 0.15:
+                available.append(dict(b))
         return available
 
     # ═══════════════════════ LIBRARY MANAGEMENT ═══════════════════════
@@ -178,7 +212,7 @@ class BookEngine:
 
         # Literacy check
         lit = agent_profile.literacy_level
-        reqs = self.catalog.get("reading_mechanics", {}).get("literacy_requirement", {})
+        reqs = self.READING_MECHANICS.get("literacy_requirement", {})
         readable = []
         for b in unread:
             min_lit = reqs.get(b.category, 0.1)
@@ -255,7 +289,7 @@ class BookEngine:
         if unread:
             lines.append("## 📚 书架上未读完的书")
             for b in unread[:3]:
-                cat_icon = self.catalog.get("categories", {}).get(b.category, {}).get("icon", "📖")
+                cat_icon = self.CATEGORIES.get(b.category, {}).get("icon", "📖")
                 lines.append(f"- {cat_icon} 《{b.title}》({b.category}) 已读{b.chapters_read}/{b.chapters}章: {b.description[:60]}")
         if finished:
             lines.append(f"📚 已读完{len(finished)}本: {', '.join(f'《{b.title}》' for b in finished[-5:])}")
@@ -351,6 +385,8 @@ if __name__ == "__main__":
     library = engine.get_library("xu_renwu")
     print(f"\nLibrary: {len(library)} books")
 
+    # Filter to only books from this test run
+    library = [b for b in library if b.book_id in ("wheat_guide", "robinson_crusoe")]
     can, reason, readable = engine.can_read(profile, library, is_night=False)
     print(f"Can read: {can} ({reason})")
     if readable:
@@ -363,8 +399,9 @@ if __name__ == "__main__":
     xp = profile.skills.get("farming", {}).get("xp", 0)
     assert xp >= 40, f"Skill XP not applied! Got {xp}"
     print(f"Farming XP after reading: {xp} — OK")
-    # Reset to original value so repeated test runs don't accumulate
+    # Reset to original value
     profile.skills["farming"]["xp"] = 120
     profile.save(os.path.join(vault, "agents", "profiles", "xu_renwu.json"))
+    engine.save_library("xu_renwu", library)
 
-    print("All 6 book engine tests passed!")
+    print("All 7 book engine tests passed!")

@@ -1,0 +1,1 @@
+﻿{"id":"pasture_economics","title":"牧场经济学","author":"畜牧研究所","category":"science","chapters":4,"description":"系统分析温带草原放牧的经济优势。草原牧草蛋白质含量更高，羊群日增重可提升15%。","rarity":"uncommon","buy_price":120,"effects":{"skill_xp":null,"unlocks_fact":{"id":"grassland_pasture","description":"温带草原适合大规模放牧，牧草蛋白质含量高，羊群日增重可提升15%"},"preference_shift":{"animal_affinity":0.15},"fatigue_recovery":0}}

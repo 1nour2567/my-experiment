@@ -1,0 +1,16 @@
+{
+  "id": "wheat_guide",
+  "title": "小麦种植指南",
+  "author": "农业局",
+  "category": "skill",
+  "chapters": 4,
+  "description": "从播种到收割的完整小麦种植技术。",
+  "rarity": "common",
+  "buy_price": 50,
+  "effects": {
+    "skill_xp": {"farming": 40},
+    "unlocks_fact": null,
+    "preference_shift": null,
+    "fatigue_recovery": 0
+  }
+}

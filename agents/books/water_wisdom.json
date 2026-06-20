@@ -1,0 +1,1 @@
+﻿{"id":"water_wisdom","title":"治水要略","author":"水利工程院","category":"philosophy","chapters":3,"description":"古人治水的哲学：顺势而为，不逆水行舟。既不要怕水，也不要轻视水的力量。","rarity":"uncommon","buy_price":130,"effects":{"skill_xp":null,"unlocks_fact":{"id":"water_management","description":"排水和灌溉是同一枚硬币的两面。过度排水和过度浇水同样有害"},"preference_shift":{"drainage_anxiety":-0.10},"fatigue_recovery":0}}

@@ -1,0 +1,1 @@
+﻿{"id":"forge_mastery","title":"锻造之道","author":"铁匠行会","category":"skill","chapters":3,"description":"从选矿到淬火的完整锻造技术手册。","rarity":"uncommon","buy_price":180,"effects":{"skill_xp":{"construction":60},"unlocks_fact":null,"preference_shift":{"crafting_drive":0.10},"fatigue_recovery":0}}

@@ -1,0 +1,1 @@
+﻿{"id":"soil_science","title":"土壤的科学","author":"农业大学","category":"science","chapters":4,"description":"深入讲解土壤NPK循环、有机质管理和表土保护。","rarity":"uncommon","buy_price":150,"effects":{"skill_xp":null,"unlocks_fact":{"id":"soil_conservation","description":"覆盖作物和mulch可以有效防止表土流失。有机质>5%时作物品质概率显著提升"},"preference_shift":{"building_interest":0.05},"fatigue_recovery":0}}

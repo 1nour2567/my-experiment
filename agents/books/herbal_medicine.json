@@ -1,0 +1,1 @@
+﻿{"id":"herbal_medicine","title":"草木药典","author":"乡间郎中","category":"science","chapters":4,"description":"常见动物疾病的草药疗法。森林中的某些植物可以替代昂贵的兽药。","rarity":"rare","buy_price":250,"effects":{"skill_xp":null,"unlocks_fact":{"id":"forest_herbs","description":"森林中生长的金银花和蒲公英可制成廉价兽药，治疗动物轻度疾病"},"preference_shift":{"animal_affinity":0.10},"fatigue_recovery":0}}
