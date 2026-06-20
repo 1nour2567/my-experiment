@@ -1,19 +1,10 @@
-# 农场策略
+# ⚠ 此文件已废弃
 
-## 决策优先级
-1. 成熟→收获 2. 未水→浇水 3. 空地+种子→种植 4. 无地→开垦 5. 缺种子→买 6. 有钱→建造 7. 无事→过天
+自多Agent重构（2026-06-20）后，每个 Agent 有独立的子 vault。
 
-## 建造策略
-- 金币 > 10,000 后开始考虑建造
-- 优先围栏 (2,000G, 1天)：性价比最高，全灾害减伤
-- 其次水井 (3,000G, 2天)：旱灾保险
-- 工具房 (4,000G, 3天) 省体力、温室 (8,000G, 5天) 跨季是后期目标
-- 建造中不能使用效果，耐心等完工
+真实策略文件在:
+- `C:\agent-brain\agents\xu_renwu\knowledge\strategy.md` — 续仁武的农耕手册
+- `C:\agent-brain\agents\old_wang\knowledge\strategy.md` — 老王的牧羊经
+- `C:\agent-brain\agents\iron_lady\knowledge\strategy.md` — 铁娘子的锻造手册
 
-## 已学到的教训
-- 冬季作物：winter_seeds (GDD=15), powder_melon (GDD=40/全季)
-- 买种子用 action_type: buy, item_type: crop_name
-- 种作物必须用 positions 数组
-- 大豆固氮，轮作有加成，连作有惩罚
-- 多季收获作物 (tomato, blueberry, strawberry) 收获后不消失，会再生
-- save_seeds 保存好品种，process 加工增值 +30%
+此文件仅为 git 历史保留。
