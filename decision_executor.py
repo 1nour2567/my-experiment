@@ -228,7 +228,7 @@ def execute_action(action: str, params: dict, state: dict, *,
                     lib = _BOOK_ENGINE.get_library(_prof.id)
                     can, reason, readable = _BOOK_ENGINE.can_read(
                         _prof, lib, state.get("is_night", False),
-                        has_lamp="lamp" in _prof.inventory.get("tools_owned", [])
+                        has_lamp=True  # reading by firelight — no lamp needed
                     )
                     if not can:
                         result_msg = reason
@@ -237,10 +237,12 @@ def execute_action(action: str, params: dict, state: dict, *,
                     else:
                         result_msg = "没有可读的书"
                 if book_id:
+                    # Resolve Chinese book names to IDs (LLM uses titles like "种植基础")
                     lib = _BOOK_ENGINE.get_library(_prof.id)
+                    resolved_id = _resolve_book_name(book_id, _BOOK_ENGINE, lib)
                     target_book = None
                     for b in lib:
-                        if b.book_id == book_id:
+                        if b.book_id == resolved_id:
                             target_book = b; break
                     if target_book:
                         result = _BOOK_ENGINE.read_chapter(_prof, target_book)
@@ -249,6 +251,7 @@ def execute_action(action: str, params: dict, state: dict, *,
                             lookup_result = f"📖 新知识: {result['fact_unlocked']['description']}"
                     else:
                         result_msg = f"书架上没有这本书: {book_id}"
+                ok = True; resp = {"success": True, "message": result_msg}
                 ok = True; resp = {"success": True, "message": result_msg}
                 _BOOK_ENGINE.save_library(_prof.id, lib)
                 break
@@ -373,6 +376,43 @@ def execute_action(action: str, params: dict, state: dict, *,
         "result_msg": result_msg, "ok": ok, "resp": resp,
         "lookup_result": lookup_result, "action": action, "params": params,
     }
+
+
+# ═══════════════════════════ BOOK NAME RESOLUTION ═══════════════════════════
+
+def _resolve_book_name(book_id: str, _BOOK_ENGINE, library: list) -> str:
+    """Resolve Chinese book titles to English IDs. LLM passes titles like '种植基础',
+    '锻造入门' etc. but actual book files use English IDs like 'planting_basics'."""
+    # Direct match first
+    if _BOOK_ENGINE.get_book_def(book_id):
+        return book_id
+    # Check library for title match
+    for b in library:
+        if b.title and b.title in book_id:
+            return b.book_id
+    # Check catalog for title match
+    all_books = _BOOK_ENGINE.list_available_books()
+    for b in all_books:
+        if b.get("title", "") in book_id:
+            return b["id"]
+        if book_id in b.get("title", ""):
+            return b["id"]
+    # Known Chinese→English mappings
+    TITLE_MAP = {
+        "种植基础": "planting_basics", "畜牧基础": "herding_basics",
+        "锻造入门": "forging_basics", "小麦种植指南": "wheat_guide",
+        "牧场经济学": "pasture_economics", "不确定性的礼物": "uncertainty_gift",
+        "三年大旱纪": "great_drought", "鲁滨逊漂流记": "robinson_crusoe",
+        "土壤的科学": "soil_science", "锻造之道": "forge_mastery",
+        "草木药典": "herbal_medicine", "治水要略": "water_wisdom",
+        "农夫的日记": "farmer_diary_template",
+    }
+    for cn_name, eng_id in TITLE_MAP.items():
+        if cn_name in book_id or book_id in cn_name:
+            return eng_id
+    return book_id  # fallback: return as-is
+
+
 # ═══════════════════════════ PARAM NORMALIZATION ═══════════════════════════
 def normalize_params(params: dict) -> dict:
     """Normalize LLM-invented parameter names to server-accepted keys."""
