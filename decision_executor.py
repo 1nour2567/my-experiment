@@ -381,6 +381,7 @@ def normalize_params(params: dict) -> dict:
     for old_key, new_key in [("item","crop_type"),("seed","crop_type"),("crop","crop_type"),
                                ("pos","positions"),("position","positions"),
                                ("amount","quantity"),("count","count"),("qty","quantity"),
+                               ("quantity","amount"),  # send_gold/send_gift: LLM uses quantity
                                ("type","building_type"),("building","building_type")]:
         if old_key in params and new_key not in params:
             params[new_key] = params.pop(old_key)

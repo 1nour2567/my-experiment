@@ -288,15 +288,31 @@ DeepSeek能理解"成熟作物=收获"的关联，能执行经济循环，能发
 
 ---
 
-## 十、最终状态
+## 十、最终状态（2026-06-20，14 commits 后）
 
 | 指标 | 值 |
 |------|-----|
-| 总提交数 | **76** |
-| 核心代码行数 | agent_world_local.py 3,600+行 |
-| LLM Agent | agent-world-llm.py ~1,050行 |
-| Brain Agent | agent-world-brain.py ~450行 |
-| 模拟子系统 | 16个 |
+| 总提交数 | **100+** |
+| 核心代码行数 | agent_world_local.py 4,500+行 |
+| LLM Agent | agent-world-llm.py 665行（重构后）+ 3 模块 866 行 |
+| 独立模块 | 14 个 .py 模块 |
+| 物理子系统 | 20+ |
+| Agent 动作 | 65+ (含 bulletin_post/send_gold 等社交动作) |
+| Agent 数量 | 3 (农夫/畜牧者/工匠) |
+| 认知层数 | 6 (SenseCompiler→Schema→Interrupt→Profile→Social→Books) |
+| Agent 最佳战绩 | Y2+, 多次 harvest, emergent 社交协作 |
+| 社交动作成功 | 11 次 send_gold 在 agent 间流动 |
+| 生态交互 | 野兔毁作物→公告→凑钱建围栏 (完整 emergent 链) |
+
+### 经验总结
+
+**涌现设计优于硬编码。** Agent 看到狼群警告后自发发明了 bulletin_post 动作。我们只需给它工具，它自己找用法。
+
+**先做单Agent再做多Agent。** W1的人格化是多Agent的前提——没有独特的性格就是复制品。
+
+**重构不吓人。** 1891行单文件拆成4模块，引入3个bug全修完。更易维护。
+
+**生态驱动社交。** 最活跃的社交不是我们设计的——是野兔毁了作物后 agent 自发组织防御。系统给条件，emergence 自己发生。
 | 动作种类 | 60+ |
 | Agent最佳战绩 | 8,942G, 150次收获, Y2 Winter D7 |
 | 记忆首次调用 | 3次recall @ v11 |

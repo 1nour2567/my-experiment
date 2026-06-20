@@ -425,22 +425,64 @@ soil_type, moisture_estimate, wood_quality, hidden_resource (近距)
 
 ## 23. 多Agent与社交系统
 
-**Phase W2**. 多个 Agent 共享同一个物理世界，通过社交交互。
+**Phase W2, 2026-06-20 增强**. 多个 Agent 共享同一个物理世界，通过社交交互形成 emergent 协作。
 
 ### 文件
 - `multi_agent_launcher.py` — 159 行
 - `agent-world-llm.py --profile` 参数化
+- `agent_profile.py:resolve_agent_name()` — 中英文名称映射
 
-### 社交动作
+### 社交动作（6 种）
 
 **social_msg(target, message):**
 - 写入 `PARENT_VAULT/social/{target}_inbox.md`
-- 接收方下次 cycle 读取并清空
+- 接收方下次 cycle 读取并注入 prompt
+- 消息带发送方游戏时间戳（支持跨时间通信）
+- 读后清空收件箱，内容通过 `remember("from_"+sender, msg)` 存入长期记忆
 - 25% 概率附带传言传播
 
 **social_lookup(target):**
 - 读取 `agents/{target}/state/farm.md`
-- 返回对方农场快照
+- 返回对方农场快照（金币/作物/库存/需求）
+
+**bulletin_post(message):**
+- 广播消息到**所有其他 agent** 的收件箱
+- 生态事件后 Agent 自发发布（"野兔毁了10株小麦！建围栏需要2000G！"）
+- agent_profile 名解析：接受中文名或英文 ID
+
+**bulletin_read():**
+- 扫描 `social/` 目录下所有收件箱，提取公告内容
+- 返回最近 10 条公告摘要
+
+**send_gold(target, amount):**
+- 本地文件转账通知（不经过服务器）
+- 自动从发送方 state["gold"] 扣款
+- 参数规范化：LLM 可用 `amount` 或 `quantity` 键
+
+**send_gift(target, item, qty):**
+- 本地文件赠礼通知
+- 写入接收方收件箱
+
+### 名称映射系统
+LLM 用中文显示名做 target（如"铁娘子"），系统自动解析为 profile ID（"iron_lady"）：
+- `agent_profile.resolve_agent_name("铁娘子")` → `"iron_lady"`
+- `agent_profile.build_name_map()` → `{"续仁武":"xu_renwu", "老王":"old_wang", "铁娘子":"iron_lady"}`
+- 收件箱读写同时检查 `{id}_inbox.md` 和 `{display_name}_inbox.md`
+
+### 家庭叙事
+SYSTEM_PROMPT 将三个 Agent 定义为**血脉相连的家人**：
+- 不需建立信任——生来信任彼此
+- 金币共享、物资调剂
+- 生态威胁出现时全员协作防御（公告→凑钱→建围栏）
+- 每天 21:00 是收信时间
+
+### Emergent 协作实例（已验证）
+```
+野兔毁作物 → xu_renwu bulletin_post →
+old_wang: "我出1000G，你出490G" →
+iron_lady: send_gold(889G) →
+三人凑到2000G → 建围栏保护全家
+```
 
 ### 多 Agent 启动
 ```bash
