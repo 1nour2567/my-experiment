@@ -504,7 +504,7 @@ for cycle in range(3000):
         HDRS=HDRS, PROX=PROX, BASE_FARM=BASE_FARM, BASE_BAR=BASE_BAR,
         FID=FID, AID=AID)
     user_msg = ctx["user_msg"]
-    lookup_result = ctx.get("lookup_result","")
+    lookup_result = ctx.get("lookup_result","") or ctx.get("new_lookup_result","")
     _last_past_report = ctx.get("_last_past_report","")
     user_msg += "\n→ Output valid JSON. Keep thoughts < 80 chars."
 
@@ -551,6 +551,7 @@ for cycle in range(3000):
         _same_day_cycles=_same_day_cycles, log_lines=log_lines)
     result_msg = exec_result["result_msg"]
     ok = exec_result["ok"]
+    resp = exec_result.get("resp", {})
     if exec_result.get("lookup_result"):
         lookup_result = exec_result["lookup_result"]
 

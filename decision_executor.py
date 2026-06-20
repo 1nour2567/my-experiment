@@ -306,59 +306,60 @@ def fallback_decision(state: dict, CROPS: dict) -> dict:
     if is_night:
         action = "sleep"; params = {"hours": 8}
         return {"action": action, "params": params, "thoughts": "Night — sleep to morning"}
-    elif hour > 0:
-        if len(storage) > 2 and gold < 5000:
-            action = "sell_storage"; thoughts = f"Sell ({len(storage)} items, G={gold})"
-        elif any(c.get("gdd_percent",0) >= 95 for c in crops):
-            action = "harvest"; thoughts = "Harvest ripe"
-        elif any(not c.get("watered_today",False) for c in crops) and state["weather"] not in ("rainy","flood"):
-            pts = [[c.get("position_x",0),c.get("position_y",0)] for c in crops if not c.get("watered_today",False)]
-            action = "water"; params = {"positions": pts}; thoughts = "Water crops"
-        elif farmer.get("hunger",100) < 50 and len(storage) > 0:
-            action = "eat"; thoughts = f"Eat (hunger={farmer['hunger']})"
-        elif empty_tiles > 0 and state["energy"] >= 12:
-            farm_lv = farmer.get("skills",{}).get("farming",1)
-            for cn, ci in CROPS.items():
+
+    # ── Daytime fallback logic ──
+    if len(storage) > 2 and gold < 5000:
+        action = "sell_storage"; thoughts = f"Sell ({len(storage)} items, G={gold})"
+    elif any(c.get("gdd_percent",0) >= 95 for c in crops):
+        action = "harvest"; thoughts = "Harvest ripe"
+    elif any(not c.get("watered_today",False) for c in crops) and state["weather"] not in ("rainy","flood"):
+        pts = [[c.get("position_x",0),c.get("position_y",0)] for c in crops if not c.get("watered_today",False)]
+        action = "water"; params = {"positions": pts}; thoughts = "Water crops"
+    elif farmer.get("hunger",100) < 50 and len(storage) > 0:
+        action = "eat"; thoughts = f"Eat (hunger={farmer['hunger']})"
+    elif empty_tiles > 0 and state["energy"] >= 12:
+        farm_lv = farmer.get("skills",{}).get("farming",1)
+        for cn, ci in CROPS.items():
+            sk = f"{cn}_seeds"
+            if state["season"] in ci["seasons"] and inv.get(sk,0) > 0:
+                n = min(empty_tiles, inv[sk], 9)
+                if farm_lv >= 2 and n >= 4:
+                    action = "plant_bulk"; params = {"crop_type": cn, "count": n}
+                    thoughts = f"Bulk plant {n}x{ci['name']}"; break
+                else:
+                    pts = [[i % 3, i // 3] for i in range(n)]
+                    action = "plant"; params = {"crop_type": cn, "positions": pts}
+                    thoughts = f"Plant {n}x{ci['name']}"; break
+    if "fence" not in state.get("buildings",[]) and gold >= 2100:
+        action = "build"; params = {"building_type": "fence"}; thoughts = "Build fence"
+    elif "well" not in state.get("buildings",[]) and gold >= 3100 and "fence" in state.get("buildings",[]):
+        action = "build"; params = {"building_type": "well"}; thoughts = "Build well"
+    if action == "next_day" and state.get("weed_count",0) > 5 and state["energy"] >= 30:
+        action = "weed_all"; thoughts = f"Weed ({state['weed_count']} weeds)"
+    if action == "next_day" and state["tilled"] < 9 and state["energy"] >= 50 and (state["tilled"] == 0 or gold >= 200):
+        farm_lv = farmer.get("skills",{}).get("farming",1)
+        need = 9 - state["tilled"]
+        if farm_lv >= 2 and need >= 4:
+            n = min(need, 6)
+            action = "till_bulk"; params = {"count": n}
+            thoughts = f"Bulk till {n}"
+        else:
+            action = "till"; params = {"positions": [[0,0],[0,1],[0,2]]}
+            thoughts = f"Till 3"
+    if action == "next_day" and gold >= 100:
+        for cn, ci in CROPS.items():
+            if state["season"] in ci["seasons"]:
                 sk = f"{cn}_seeds"
-                if state["season"] in ci["seasons"] and inv.get(sk,0) > 0:
-                    n = min(empty_tiles, inv[sk], 9)
-                    if farm_lv >= 2 and n >= 4:
-                        action = "plant_bulk"; params = {"crop_type": cn, "count": n}
-                        thoughts = f"Bulk plant {n}x{ci['name']}"; break
-                    else:
-                        pts = [[i % 3, i // 3] for i in range(n)]
-                        action = "plant"; params = {"crop_type": cn, "positions": pts}
-                        thoughts = f"Plant {n}x{ci['name']}"; break
-        if "fence" not in state.get("buildings",[]) and gold >= 2100:
-            action = "build"; params = {"building_type": "fence"}; thoughts = "Build fence"
-        elif "well" not in state.get("buildings",[]) and gold >= 3100 and "fence" in state.get("buildings",[]):
-            action = "build"; params = {"building_type": "well"}; thoughts = "Build well"
-        if action == "next_day" and state.get("weed_count",0) > 5 and state["energy"] >= 30:
-            action = "weed_all"; thoughts = f"Weed ({state['weed_count']} weeds)"
-        if action == "next_day" and state["tilled"] < 9 and state["energy"] >= 50 and (state["tilled"] == 0 or gold >= 200):
-            farm_lv = farmer.get("skills",{}).get("farming",1)
-            need = 9 - state["tilled"]
-            if farm_lv >= 2 and need >= 4:
-                n = min(need, 6)
-                action = "till_bulk"; params = {"count": n}
-                thoughts = f"Bulk till {n}"
-            else:
-                action = "till"; params = {"positions": [[0,0],[0,1],[0,2]]}
-                thoughts = f"Till 3"
-        if action == "next_day" and gold >= 100:
-            for cn, ci in CROPS.items():
-                if state["season"] in ci["seasons"]:
-                    sk = f"{cn}_seeds"
-                    have = inv.get(sk,0)
-                    if have < empty_tiles + 3:
-                        qty = min(10, max(3, (gold - 500) // max(1, ci["buy"])))
-                        qty = max(3, qty)
-                        if qty >= 3 and gold >= ci["buy"] * qty:
-                            action = "buy"; params = {"item_type": cn, "quantity": qty}
-                            thoughts = f"Buy {qty}x{ci['name']}"; break
-        if action == "next_day" and farmer.get("hunger",100) < 60 and len(storage) == 0 and gold >= 30:
-            action = "buy"; params = {"item_type": "bread"}; thoughts = "Buy bread"
-        if action == "next_day" and farmer.get("fatigue",0) >= 30:
-            action = "sleep"; params = {"hours": 8}; thoughts = "Tired — sleep"
+                have = inv.get(sk,0)
+                if have < empty_tiles + 3:
+                    qty = min(10, max(3, (gold - 500) // max(1, ci["buy"])))
+                    qty = max(3, qty)
+                    if qty >= 3 and gold >= ci["buy"] * qty:
+                        action = "buy"; params = {"item_type": cn, "quantity": qty}
+                        thoughts = f"Buy {qty}x{ci['name']}"; break
+    if action == "next_day" and farmer.get("hunger",100) < 60 and len(storage) == 0 and gold >= 30:
+        action = "buy"; params = {"item_type": "bread"}; thoughts = "Buy bread"
+    if action == "next_day" and farmer.get("fatigue",0) >= 30:
+        action = "sleep"; params = {"hours": 8}; thoughts = "Tired — sleep"
 
     return {"action": action, "params": params or {}, "thoughts": "Fallback"}

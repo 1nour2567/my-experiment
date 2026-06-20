@@ -276,4 +276,5 @@ def build_user_message(state, *, cycle: int, log_lines: list,
         pass
 
     return {"user_msg": user_msg, "lookup_result": lookup_result,
-            "_last_past_report": _last_past_report}
+            "_last_past_report": _last_past_report,
+            "new_lookup_result": new_lookup_result}
